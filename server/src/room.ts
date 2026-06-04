@@ -73,6 +73,18 @@ export class Room {
     this.broadcast(events);
   }
 
+  /**
+   * Wipe the room back to an empty lobby: clear state, seats, tokens, and the
+   * event log. Connected sockets stay (their `auth` re-seats them); callers
+   * should prompt clients to re-auth. Dev/testing only.
+   */
+  reset(): void {
+    this.state = initialState();
+    this.tokenToPlayerId.clear();
+    this.eventLog.length = 0;
+    for (const viewer of this.viewers.values()) viewer.playerId = null;
+  }
+
   /** Push a fresh personalized snapshot to one viewer (e.g. just after auth). */
   sendSnapshotTo(socketId: string): void {
     const viewer = this.viewers.get(socketId);

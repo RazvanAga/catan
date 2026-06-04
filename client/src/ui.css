@@ -505,3 +505,22 @@ button.primary:disabled {
   cursor: pointer;
   line-height: 1;
 }
+
+.reset-room {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  z-index: 100;
+  padding: 6px 10px;
+  font-size: 0.72rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #2a1c1c;
+  color: #e7a3a3;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.reset-room:hover {
+  opacity: 1;
+}

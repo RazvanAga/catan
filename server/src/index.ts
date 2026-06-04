@@ -17,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { Server } from 'socket.io';
 import {
+  Action,
   ClientToServerEvents,
   IllegalActionError,
   ServerToClientEvents,
@@ -45,9 +46,11 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
 const room = new Room();
 
 io.on('connection', (socket) => {
-  // Per-connection identity, established on `auth`.
+  // The token is the secret; the seat is always derived from it through the
+  // room, so a room reset (which clears seats) takes effect immediately without
+  // this socket reconnecting.
   let token: string | null = null;
-  let playerId: string | null = null;
+  const seat = (): string | null => (token ? room.seatForToken(token) : null);
 
   function reportError(err: unknown): void {
     const message =
@@ -55,34 +58,39 @@ io.on('connection', (socket) => {
     socket.emit('actionError', { message });
   }
 
+  /** Resolve the caller's seat, build its action, and apply — reporting errors. */
+  function act(build: (pid: string) => Action): void {
+    const pid = seat();
+    if (!pid) return;
+    try {
+      room.apply(build(pid));
+    } catch (err) {
+      reportError(err);
+    }
+  }
+
   socket.on('auth', (msg) => {
     token = msg.token ?? randomUUID();
     socket.emit('authed', { token });
 
-    const existingSeat = room.seatForToken(token);
-    if (existingSeat) {
+    if (room.seatForToken(token)) {
       // Returning player reclaims their exact seat.
-      playerId = existingSeat;
-      room.addViewer(socket.id, socket, playerId);
+      room.addViewer(socket.id, socket, room.seatForToken(token));
       room.sendSnapshotTo(socket.id);
       return;
     }
-
     if (room.phase !== 'LOBBY') {
       // No seat and the game has started: show the "game in progress" wall.
       socket.emit('blocked', { reason: 'game_in_progress' });
       return;
     }
-
     // Fresh lobby visitor: tracked as an unseated viewer so the roster stays live.
     room.addViewer(socket.id, socket, null);
     room.sendSnapshotTo(socket.id);
   });
 
   socket.on('join', (msg) => {
-    if (!token) return; // must auth first
-    if (playerId) return; // already seated
-
+    if (!token || seat()) return; // must auth first; ignore if already seated
     const newSeat = randomUUID();
     try {
       room.apply({ type: 'JOIN', playerId: newSeat, name: msg.name, color: msg.color });
@@ -90,134 +98,37 @@ io.on('connection', (socket) => {
       reportError(err);
       return;
     }
-    playerId = newSeat;
     room.bindToken(token, newSeat);
     room.setViewerSeat(socket.id, newSeat);
     room.sendSnapshotTo(socket.id);
   });
 
-  socket.on('startGame', () => {
-    if (!playerId) return;
-    try {
-      // The server owns all RNG: it generates the board arrangement and the
-      // shuffled dev deck, then passes them into the (deterministic) reducer.
-      room.apply({
-        type: 'START_GAME',
-        actorId: playerId,
-        board: createBoardSetup(),
-        devDeck: createDevDeck(),
-      });
-    } catch (err) {
-      reportError(err);
-    }
-  });
+  // The server owns all RNG: dice, board arrangement, and the shuffled dev deck
+  // are generated here and passed into the (deterministic) reducer as data.
+  socket.on('startGame', () =>
+    act((pid) => ({ type: 'START_GAME', actorId: pid, board: createBoardSetup(), devDeck: createDevDeck() })),
+  );
+  socket.on('roll', () => act((pid) => ({ type: 'ROLL', actorId: pid, dice: rollDice() })));
 
-  socket.on('placeSetupSettlement', ({ vertex }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'PLACE_SETUP_SETTLEMENT', actorId: playerId, vertex });
-    } catch (err) {
-      reportError(err);
-    }
-  });
+  socket.on('placeSetupSettlement', ({ vertex }) =>
+    act((pid) => ({ type: 'PLACE_SETUP_SETTLEMENT', actorId: pid, vertex })),
+  );
+  socket.on('placeSetupRoad', ({ edge }) => act((pid) => ({ type: 'PLACE_SETUP_ROAD', actorId: pid, edge })));
+  socket.on('endTurn', () => act((pid) => ({ type: 'END_TURN', actorId: pid })));
+  socket.on('buildRoad', ({ edge }) => act((pid) => ({ type: 'BUILD_ROAD', actorId: pid, edge })));
+  socket.on('buildSettlement', ({ vertex }) => act((pid) => ({ type: 'BUILD_SETTLEMENT', actorId: pid, vertex })));
+  socket.on('buildCity', ({ vertex }) => act((pid) => ({ type: 'BUILD_CITY', actorId: pid, vertex })));
+  socket.on('tradeBank', ({ give, receive }) => act((pid) => ({ type: 'TRADE_BANK', actorId: pid, give, receive })));
+  socket.on('proposeTrade', ({ give, want }) => act((pid) => ({ type: 'PROPOSE_TRADE', actorId: pid, give, want })));
+  socket.on('respondTrade', ({ response }) => act((pid) => ({ type: 'RESPOND_TRADE', actorId: pid, response })));
+  socket.on('confirmTrade', ({ partnerId }) => act((pid) => ({ type: 'CONFIRM_TRADE', actorId: pid, partnerId })));
+  socket.on('cancelTrade', () => act((pid) => ({ type: 'CANCEL_TRADE', actorId: pid })));
 
-  socket.on('placeSetupRoad', ({ edge }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'PLACE_SETUP_ROAD', actorId: playerId, edge });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('roll', () => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'ROLL', actorId: playerId, dice: rollDice() });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('endTurn', () => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'END_TURN', actorId: playerId });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('buildRoad', ({ edge }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'BUILD_ROAD', actorId: playerId, edge });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('buildSettlement', ({ vertex }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'BUILD_SETTLEMENT', actorId: playerId, vertex });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('buildCity', ({ vertex }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'BUILD_CITY', actorId: playerId, vertex });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('tradeBank', ({ give, receive }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'TRADE_BANK', actorId: playerId, give, receive });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('proposeTrade', ({ give, want }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'PROPOSE_TRADE', actorId: playerId, give, want });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('respondTrade', ({ response }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'RESPOND_TRADE', actorId: playerId, response });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('confirmTrade', ({ partnerId }) => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'CONFIRM_TRADE', actorId: playerId, partnerId });
-    } catch (err) {
-      reportError(err);
-    }
-  });
-
-  socket.on('cancelTrade', () => {
-    if (!playerId) return;
-    try {
-      room.apply({ type: 'CANCEL_TRADE', actorId: playerId });
-    } catch (err) {
-      reportError(err);
-    }
+  // Dev/testing convenience: wipe the room back to an empty lobby and tell every
+  // client to re-auth (so even "game in progress" tabs return to the join screen).
+  socket.on('resetRoom', () => {
+    room.reset();
+    io.emit('roomReset');
   });
 
   socket.on('disconnect', () => {

@@ -9,10 +9,14 @@
     "client"
   ],
   "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm:dev:server\" \"npm:dev:client\"",
     "test": "npm run test --workspace @catan/shared",
     "dev:server": "npm run dev --workspace @catan/server",
     "dev:client": "npm run dev --workspace @catan/client",
     "build": "npm run build --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
   },
   "engines": {
     "node": ">=20"

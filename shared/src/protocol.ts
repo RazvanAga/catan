@@ -66,6 +66,8 @@ export interface ClientToServerEvents {
   respondTrade: (msg: { response: TradeResponse }) => void;
   confirmTrade: (msg: { partnerId: string }) => void;
   cancelTrade: () => void;
+  // --- Dev/testing ---
+  resetRoom: () => void;
 }
 
 export interface ServerToClientEvents {
@@ -74,4 +76,6 @@ export interface ServerToClientEvents {
   events: (msg: EventsMsg) => void;
   actionError: (msg: ErrorMsg) => void;
   blocked: (msg: BlockedMsg) => void;
+  /** The room was reset; clients should re-auth back into a fresh lobby. */
+  roomReset: () => void;
 }

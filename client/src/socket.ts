@@ -16,7 +16,13 @@ import type {
 import { useStore } from './store';
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? 'http://localhost:3001';
-const TOKEN_KEY = 'catan.sessionToken';
+
+// Local-testing convenience: tabs of the same browser share localStorage, so by
+// default they'd reclaim the same seat. Passing a distinct `?u=<id>` in the URL
+// namespaces the stored token, letting one browser hold several players at once
+// (e.g. open ?u=1, ?u=2, ?u=3 in three tabs). Harmless in production.
+const seatNamespace = new URLSearchParams(location.search).get('u') ?? '';
+const TOKEN_KEY = 'catan.sessionToken' + (seatNamespace ? `:${seatNamespace}` : '');
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
@@ -50,6 +56,13 @@ socket.on('events', ({ events }) => {
 
 socket.on('blocked', ({ reason }) => {
   useStore.getState().setBlocked(reason);
+});
+
+socket.on('roomReset', () => {
+  // Drop transient state and re-auth into the fresh lobby (works even from the
+  // "game in progress" wall, since the server cleared all seats).
+  useStore.setState({ events: [], error: null, blocked: null });
+  socket.emit('auth', { token: localStorage.getItem(TOKEN_KEY) ?? undefined });
 });
 
 socket.on('actionError', ({ message }) => {
@@ -112,5 +125,8 @@ export const commands = {
   cancelTrade() {
     useStore.getState().setError(null);
     socket.emit('cancelTrade');
+  },
+  resetRoom() {
+    socket.emit('resetRoom');
   },
 };
