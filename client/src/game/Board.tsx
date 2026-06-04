@@ -1,0 +1,193 @@
+/**
+ * The SVG board. Renders the frozen topology (`BOARD`) filled with the live
+ * content + pieces from the server snapshot (`view.board`): hex tiles colored by
+ * resource, number tokens, ports, the robber, and placed roads/settlements/
+ * cities in player colors. Highlighted vertices/edges are clickable for the
+ * active player's current placement.
+ */
+
+import { useMemo } from 'react';
+import { BOARD, GameView, PlayerColor } from '@catan/shared';
+import { COLOR_HEX, RESOURCE_HEX } from '../colors';
+
+interface BoardProps {
+  view: GameView;
+  highlightVertices?: Set<number>;
+  highlightEdges?: Set<number>;
+  onVertexClick?: (vertex: number) => void;
+  onEdgeClick?: (edge: number) => void;
+}
+
+function colorOf(view: GameView, playerId: string): string {
+  const p = view.players.find((pl) => pl.id === playerId);
+  return p ? COLOR_HEX[p.color as PlayerColor] : '#888';
+}
+
+export function Board({
+  view,
+  highlightVertices,
+  highlightEdges,
+  onVertexClick,
+  onEdgeClick,
+}: BoardProps) {
+  const board = view.board;
+
+  const viewBox = useMemo(() => {
+    const pts = [
+      ...BOARD.vertices.map((v) => v.pixel),
+      ...BOARD.ports.map((p) => p.pixel),
+    ];
+    const xs = pts.map((p) => p.x);
+    const ys = pts.map((p) => p.y);
+    const pad = 30;
+    const minX = Math.min(...xs) - pad;
+    const minY = Math.min(...ys) - pad;
+    const w = Math.max(...xs) - minX + pad;
+    const h = Math.max(...ys) - minY + pad;
+    return `${minX} ${minY} ${w} ${h}`;
+  }, []);
+
+  if (!board) return null;
+
+  return (
+    <svg className="board" viewBox={viewBox} role="img" aria-label="Catan board">
+      {/* Tiles */}
+      {BOARD.tiles.map((tile) => {
+        const resource = board.setup.tileResources[tile.id];
+        const token = board.setup.tileTokens[tile.id];
+        const points = tile.vertices.map((vid) => `${BOARD.vertices[vid].pixel.x},${BOARD.vertices[vid].pixel.y}`).join(' ');
+        const isRed = token === 6 || token === 8;
+        return (
+          <g key={`t${tile.id}`}>
+            <polygon points={points} fill={RESOURCE_HEX[resource]} stroke="#0d141d" strokeWidth={2} />
+            {token != null && (
+              <g>
+                <circle cx={tile.center.x} cy={tile.center.y} r={16} fill="#f4ecd6" stroke="#0d141d" />
+                <text
+                  x={tile.center.x}
+                  y={tile.center.y + 5}
+                  textAnchor="middle"
+                  fontSize={15}
+                  fontWeight={700}
+                  fill={isRed ? '#c0392b' : '#23303f'}
+                >
+                  {token}
+                </text>
+              </g>
+            )}
+          </g>
+        );
+      })}
+
+      {/* Ports */}
+      {BOARD.ports.map((port) => {
+        const type = board.setup.portTypes[port.id];
+        const label = type === '3:1' ? '3:1' : `2:1`;
+        return (
+          <g key={`p${port.id}`}>
+            {port.vertices.map((vid) => (
+              <line
+                key={vid}
+                x1={port.pixel.x}
+                y1={port.pixel.y}
+                x2={BOARD.vertices[vid].pixel.x}
+                y2={BOARD.vertices[vid].pixel.y}
+                stroke="#5a4a2f"
+                strokeWidth={2}
+              />
+            ))}
+            <circle cx={port.pixel.x} cy={port.pixel.y} r={14} fill="#2a3a52" stroke="#9fb4d0" />
+            <text x={port.pixel.x} y={port.pixel.y + 1} textAnchor="middle" fontSize={9} fontWeight={700} fill="#dfe8f4">
+              {label}
+            </text>
+            {type !== '3:1' && (
+              <text x={port.pixel.x} y={port.pixel.y + 10} textAnchor="middle" fontSize={7} fill="#dfe8f4">
+                {type}
+              </text>
+            )}
+          </g>
+        );
+      })}
+
+      {/* Roads */}
+      {Object.entries(board.roads).map(([edgeId, road]) => {
+        const e = BOARD.edges[Number(edgeId)];
+        const [a, b] = e.vertices;
+        return (
+          <line
+            key={`r${edgeId}`}
+            x1={BOARD.vertices[a].pixel.x}
+            y1={BOARD.vertices[a].pixel.y}
+            x2={BOARD.vertices[b].pixel.x}
+            y2={BOARD.vertices[b].pixel.y}
+            stroke={colorOf(view, road.owner)}
+            strokeWidth={7}
+            strokeLinecap="round"
+          />
+        );
+      })}
+
+      {/* Edge highlights (clickable) */}
+      {[...(highlightEdges ?? [])].map((edgeId) => {
+        const e = BOARD.edges[edgeId];
+        const [a, b] = e.vertices;
+        return (
+          <line
+            key={`he${edgeId}`}
+            x1={BOARD.vertices[a].pixel.x}
+            y1={BOARD.vertices[a].pixel.y}
+            x2={BOARD.vertices[b].pixel.x}
+            y2={BOARD.vertices[b].pixel.y}
+            stroke="#ffffff"
+            strokeOpacity={0.5}
+            strokeWidth={9}
+            strokeLinecap="round"
+            className="clickable"
+            onClick={() => onEdgeClick?.(edgeId)}
+          />
+        );
+      })}
+
+      {/* Robber */}
+      <g>
+        <circle
+          cx={BOARD.tiles[board.robberTile].center.x}
+          cy={BOARD.tiles[board.robberTile].center.y - 22}
+          r={9}
+          fill="#1a1a1a"
+          stroke="#fff"
+          strokeWidth={1.5}
+        />
+      </g>
+
+      {/* Buildings */}
+      {Object.entries(board.buildings).map(([vid, b]) => {
+        const p = BOARD.vertices[Number(vid)].pixel;
+        const fill = colorOf(view, b.owner);
+        return b.city ? (
+          <rect key={`b${vid}`} x={p.x - 9} y={p.y - 9} width={18} height={18} rx={3} fill={fill} stroke="#0d141d" strokeWidth={2} />
+        ) : (
+          <circle key={`b${vid}`} cx={p.x} cy={p.y} r={8} fill={fill} stroke="#0d141d" strokeWidth={2} />
+        );
+      })}
+
+      {/* Vertex highlights (clickable) */}
+      {[...(highlightVertices ?? [])].map((vid) => {
+        const p = BOARD.vertices[vid].pixel;
+        return (
+          <circle
+            key={`hv${vid}`}
+            cx={p.x}
+            cy={p.y}
+            r={10}
+            fill="#ffffff"
+            fillOpacity={0.55}
+            stroke="#fff"
+            className="clickable"
+            onClick={() => onVertexClick?.(vid)}
+          />
+        );
+      })}
+    </svg>
+  );
+}
