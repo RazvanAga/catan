@@ -20,15 +20,28 @@ npm workspaces, three packages:
 ```bash
 npm install            # installs all workspaces
 
-npm test               # runs the shared reducer unit tests (Vitest)
+npm test               # runs the shared rules unit tests (Vitest)
 
-npm run dev:server     # starts the Socket.IO server on http://localhost:3001
-npm run dev:client     # starts the Vite client on http://localhost:5173
+npm run dev            # starts the server (:3001) and client (:5173) together
+# or run them separately:
+npm run dev:server     # Socket.IO server on http://localhost:3001
+npm run dev:client     # Vite client on http://localhost:5173
 ```
 
-Run the server and client in two terminals, then open `http://localhost:5173`
-in several browser tabs (each tab is a separate player, identified by a session
-token stored in `localStorage`).
+Then open `http://localhost:5173`.
+
+### Testing multiplayer locally
+
+A game needs **3–4 players**. Browser tabs share `localStorage`, so by default
+every tab in one browser reclaims the same seat. To play several seats from one
+browser, give each tab a distinct identity with the `?u=` query param:
+
+- Tab 1 → `http://localhost:5173/?u=1` (first joiner = owner)
+- Tab 2 → `http://localhost:5173/?u=2`
+- Tab 3 → `http://localhost:5173/?u=3`
+
+A **Reset room** button (bottom-right, dev-only) wipes the singleton room back to
+an empty lobby for everyone — handy for re-testing without restarting the server.
 
 ### Environment overrides
 
@@ -37,9 +50,33 @@ token stored in `localStorage`).
 
 ## Status
 
-Implements **issue 0002 — walking skeleton (lobby & room lifecycle)**: join with
-name + color, live lobby roster, owner-gated start (3–4 players), `LOBBY → IN_GAME`
-transition, the "game in progress" wall, session tokens, per-player snapshots, and
-an append-only event log. This slice is HITL — the established architecture
-(reducer signature, projection boundary, message protocol, client store) is meant
-to be reviewed before downstream slices build on it.
+Implemented through **issue 0008**. The shared rules engine is covered by 59
+Vitest tests (`npm test`).
+
+| Issue | Slice | Done |
+|-------|-------|------|
+| 0002 | Walking skeleton — lobby & room lifecycle | ✅ |
+| 0003 | Board topology graph + static SVG board | ✅ |
+| 0004 | Setup phase — snake-draft placement | ✅ |
+| 0005 | Roll → resource production → end turn | ✅ |
+| 0006 | Building roads, settlements, cities + VP | ✅ |
+| 0007 | Bank & port trading | ✅ |
+| 0008 | Player-to-player trading | ✅ |
+| 0009 | The 7 — discard, move robber, steal | ⬜ |
+| 0010 | Development cards | ⬜ |
+| 0011 | Longest Road bonus | ⬜ |
+| 0012 | Win condition & victory screen | ⬜ |
+| 0013 | Post-game replay & crown | ⬜ |
+| 0014 | Disconnection / reconnection seat lifecycle | ⬜ |
+
+**Playable today:** lobby → snake-draft setup → roll/produce/end-turn → build
+roads/settlements/cities → bank/port trades → player trades, all server-enforced
+with per-player snapshots and a narration event log.
+
+**Not yet:** a roll of 7 currently produces nothing (no robber/discard/steal yet),
+there are no development cards, no Longest Road / Largest Army, and no win
+condition — so a game cannot be *won* until those slices land.
+
+Issues 0002 and 0003 are HITL: the architecture (reducer signature, projection
+boundary, message protocol, client store) and the frozen board graph are meant to
+be human-reviewed before downstream slices are trusted.
