@@ -50,7 +50,7 @@ an empty lobby for everyone — handy for re-testing without restarting the serv
 
 ## Status
 
-Implemented through **issue 0008**. The shared rules engine is covered by 59
+Implemented through **issue 0011**. The shared rules engine is covered by 90
 Vitest tests (`npm test`).
 
 | Issue | Slice | Done |
@@ -62,20 +62,20 @@ Vitest tests (`npm test`).
 | 0006 | Building roads, settlements, cities + VP | ✅ |
 | 0007 | Bank & port trading | ✅ |
 | 0008 | Player-to-player trading | ✅ |
-| 0009 | The 7 — discard, move robber, steal | ⬜ |
-| 0010 | Development cards | ⬜ |
-| 0011 | Longest Road bonus | ⬜ |
+| 0009 | The 7 — discard, move robber, steal | ✅ |
+| 0010 | Development cards | ✅ |
+| 0011 | Longest Road bonus | ✅ |
 | 0012 | Win condition & victory screen | ⬜ |
 | 0013 | Post-game replay & crown | ⬜ |
 | 0014 | Disconnection / reconnection seat lifecycle | ⬜ |
 
 **Playable today:** lobby → snake-draft setup → roll/produce/end-turn → build
-roads/settlements/cities → bank/port trades → player trades, all server-enforced
-with per-player snapshots and a narration event log.
+roads/settlements/cities → bank/port trades → player trades → the 7
+(discard/robber/steal) → development cards → Longest Road & Largest Army bonuses,
+all server-enforced with per-player snapshots and a narration event log.
 
-**Not yet:** a roll of 7 currently produces nothing (no robber/discard/steal yet),
-there are no development cards, no Longest Road / Largest Army, and no win
-condition — so a game cannot be *won* until those slices land.
+**Not yet:** there is no win condition or victory screen (issue 0012), so a game
+cannot yet be formally *won* even though a player can reach 10 VP.
 
 Issues 0002 and 0003 are HITL: the architecture (reducer signature, projection
 boundary, message protocol, client store) and the frozen board graph are meant to

@@ -238,6 +238,9 @@ export type GameEvent =
   // Playing a card is public, so the card type is named here.
   | { type: 'DEV_CARD_PLAYED'; playerId: string; card: DevCard }
   | { type: 'LARGEST_ARMY'; playerId: string; count: number }
+  // Longest Road changed hands (issue 0011). `playerId` is null when the bonus
+  // is revoked (no one currently holds a road of length >= 5).
+  | { type: 'LONGEST_ROAD'; playerId: string | null; length: number }
   | { type: 'MONOPOLY'; playerId: string; resource: Resource; count: number };
 
 export interface ReduceResult {

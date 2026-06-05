@@ -611,6 +611,12 @@ function Players({ view }: { view: GameView }) {
             {!p.connected && <span className="tag">offline</span>}
           </span>
           <span className="roster-stats">
+            {view.bonuses.longestRoad === p.id && (
+              <span title={`Longest Road (${view.bonuses.longestRoadLength}) +2 VP`}>🛣️</span>
+            )}
+            {view.bonuses.largestArmy === p.id && (
+              <span title={`Largest Army (${view.bonuses.largestArmyCount}) +2 VP`}>⚔️</span>
+            )}
             <span title="victory points">{p.publicVictoryPoints} VP</span>
             <span title="resource cards">🂠 {p.handCount}</span>
           </span>

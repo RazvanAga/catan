@@ -19,6 +19,7 @@ import { tradeBank } from './rules/trade.js';
 import { cancelTrade, confirmTrade, proposeTrade, respondTrade } from './rules/playertrade.js';
 import { discard, moveRobber } from './rules/robber.js';
 import { buyDevCard, playDevCard } from './rules/dev.js';
+import { recomputeLongestRoad } from './rules/longestRoad.js';
 
 export { IllegalActionError, ownerId };
 
@@ -44,6 +45,19 @@ export function initialState(): GameState {
 }
 
 export function reduce(state: GameState, action: Action): ReduceResult {
+  const result = dispatch(state, action);
+  // Any action that changes the board (a road or a settlement that splits one)
+  // can shift the Longest Road bonus. Re-evaluate once, centrally, and merge.
+  if (result.state.board && result.state.board !== state.board) {
+    const { bonuses, events } = recomputeLongestRoad(result.state);
+    if (bonuses !== result.state.bonuses) {
+      return { state: { ...result.state, bonuses }, events: [...result.events, ...events] };
+    }
+  }
+  return result;
+}
+
+function dispatch(state: GameState, action: Action): ReduceResult {
   switch (action.type) {
     case 'JOIN':
       return join(state, action);
