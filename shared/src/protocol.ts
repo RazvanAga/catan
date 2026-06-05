@@ -10,6 +10,17 @@ import { GameView } from './projection.js';
 /** Reason a connection is refused a seat. */
 export type BlockedReason = 'game_in_progress';
 
+/**
+ * Client-facing dev-card play params. Same shape as the engine's `DevCardPlay`
+ * except a Knight omits `stolen` — the server rolls which card is taken (RNG)
+ * and fills it in before handing the action to the reducer.
+ */
+export type DevCardPlayInput =
+  | { card: 'knight'; tile: number; stealFrom: string | null }
+  | { card: 'road_building'; edges: number[] }
+  | { card: 'year_of_plenty'; resources: Resource[] }
+  | { card: 'monopoly'; resource: Resource };
+
 // --- Client -> Server payloads -------------------------------------------------
 
 export interface AuthMsg {
@@ -71,6 +82,9 @@ export interface ClientToServerEvents {
   // The server picks which card is stolen (RNG); the client only names the tile
   // and the victim (null when the chosen tile has no stealable neighbour).
   moveRobber: (msg: { tile: number; stealFrom: string | null }) => void;
+  // --- Development cards (issue 0010) ---
+  buyDevCard: () => void;
+  playDevCard: (msg: { play: DevCardPlayInput }) => void;
   // --- Dev/testing ---
   resetRoom: () => void;
 }

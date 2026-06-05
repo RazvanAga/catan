@@ -428,6 +428,41 @@ button.primary:disabled {
   gap: 6px;
 }
 
+.devpanel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.devpanel-title {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.devlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.devlist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dev-name {
+  font-size: 0.85rem;
+}
+
 .banktrade {
   background: var(--card);
   border: 1px solid var(--border);

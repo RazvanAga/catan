@@ -9,6 +9,7 @@
 import { io, Socket } from 'socket.io-client';
 import type {
   ClientToServerEvents,
+  DevCardPlayInput,
   PlayerColor,
   Resource,
   ServerToClientEvents,
@@ -133,6 +134,14 @@ export const commands = {
   moveRobber(tile: number, stealFrom: string | null) {
     useStore.getState().setError(null);
     socket.emit('moveRobber', { tile, stealFrom });
+  },
+  buyDevCard() {
+    useStore.getState().setError(null);
+    socket.emit('buyDevCard');
+  },
+  playDevCard(play: DevCardPlayInput) {
+    useStore.getState().setError(null);
+    socket.emit('playDevCard', { play });
   },
   resetRoom() {
     socket.emit('resetRoom');

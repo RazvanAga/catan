@@ -137,6 +137,27 @@ io.on('connection', (socket) => {
     })),
   );
 
+  socket.on('buyDevCard', () => act((pid) => ({ type: 'BUY_DEV_CARD', actorId: pid })));
+  // For a Knight the server rolls the stolen card (same as moveRobber); other
+  // cards' params pass straight through to the reducer.
+  socket.on('playDevCard', ({ play }) =>
+    act((pid) => {
+      if (play.card === 'knight') {
+        return {
+          type: 'PLAY_DEV_CARD',
+          actorId: pid,
+          play: {
+            card: 'knight',
+            tile: play.tile,
+            stealFrom: play.stealFrom ?? null,
+            stolen: play.stealFrom ? room.pickStolenCard(play.stealFrom) : null,
+          },
+        };
+      }
+      return { type: 'PLAY_DEV_CARD', actorId: pid, play };
+    }),
+  );
+
   // Dev/testing convenience: wipe the room back to an empty lobby and tell every
   // client to re-auth (so even "game in progress" tabs return to the join screen).
   socket.on('resetRoom', () => {

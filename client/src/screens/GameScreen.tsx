@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import { GameView, RESOURCES, Resource } from '@catan/shared';
+import { BUILD_COSTS, DevCard, GameView, RESOURCES, Resource, canAfford } from '@catan/shared';
 import { useStore } from '../store';
 import { commands } from '../socket';
 import { Board } from '../game/Board';
@@ -16,6 +16,7 @@ import {
   canAffordBuild,
   isMyTurn,
   legalBuildTargets,
+  legalRoadEdges,
   legalRobberTiles,
   legalSetupRoads,
   legalSetupSettlements,
@@ -32,11 +33,26 @@ export function GameScreen() {
   // When the robber lands on a tile with multiple stealable players, hold the
   // chosen tile here until the active player picks whom to steal from.
   const [robberTile, setRobberTile] = useState<number | null>(null);
+  // The in-progress development-card play, if any (knight/road need board input;
+  // year_of_plenty/monopoly resolve in their own panels).
+  const [devAction, setDevAction] = useState<'knight' | 'road' | 'yop' | 'monopoly' | null>(null);
+  const [knightTile, setKnightTile] = useState<number | null>(null);
+  const [roadEdges, setRoadEdges] = useState<number[]>([]);
 
   const phase = view.turn?.phase;
   const mustMoveRobber = view.phase === 'PLAY' && myTurn && phase === 'MOVE_ROBBER';
   const canBuild = view.phase === 'PLAY' && myTurn && phase === 'ACTIONS';
+  const canPlayDev =
+    view.phase === 'PLAY' && myTurn && (phase === 'ACTIONS' || phase === 'MUST_ROLL') && !view.turn?.devCardPlayedThisTurn;
   const activeBuild = canBuild ? buildMode : null;
+  // A dev play in progress only counts while it's still legal to play one.
+  const dev = canPlayDev ? devAction : null;
+
+  function resetDev() {
+    setDevAction(null);
+    setKnightTile(null);
+    setRoadEdges([]);
+  }
 
   let highlightVertices: Set<number> | undefined;
   let highlightEdges: Set<number> | undefined;
@@ -44,8 +60,10 @@ export function GameScreen() {
   if (view.phase === 'SETUP' && myTurn) {
     if (view.setup?.pending === 'settlement') highlightVertices = legalSetupSettlements(view);
     else highlightEdges = legalSetupRoads(view);
-  } else if (mustMoveRobber) {
+  } else if (mustMoveRobber || dev === 'knight') {
     highlightTiles = legalRobberTiles(view);
+  } else if (dev === 'road') {
+    highlightEdges = new Set([...legalRoadEdges(view)].filter((e) => !roadEdges.includes(e)));
   } else if (activeBuild === 'road') {
     highlightEdges = legalBuildTargets(view, 'road');
   } else if (activeBuild === 'settlement') {
@@ -55,11 +73,21 @@ export function GameScreen() {
   }
 
   function onTileClick(tile: number) {
-    if (!mustMoveRobber) return;
-    const victims = robberVictimsAt(view, tile);
-    if (victims.length === 0) commands.moveRobber(tile, null);
-    else if (victims.length === 1) commands.moveRobber(tile, victims[0]);
-    else setRobberTile(tile); // multiple targets — ask whom to steal from
+    if (mustMoveRobber) {
+      const victims = robberVictimsAt(view, tile);
+      if (victims.length === 0) commands.moveRobber(tile, null);
+      else if (victims.length === 1) commands.moveRobber(tile, victims[0]);
+      else setRobberTile(tile); // multiple targets — ask whom to steal from
+    } else if (dev === 'knight') {
+      const victims = robberVictimsAt(view, tile);
+      if (victims.length === 0) {
+        commands.playDevCard({ card: 'knight', tile, stealFrom: null });
+        resetDev();
+      } else if (victims.length === 1) {
+        commands.playDevCard({ card: 'knight', tile, stealFrom: victims[0] });
+        resetDev();
+      } else setKnightTile(tile);
+    }
   }
 
   function onVertexClick(v: number) {
@@ -74,7 +102,13 @@ export function GameScreen() {
   }
   function onEdgeClick(e: number) {
     if (view.phase === 'SETUP') commands.placeSetupRoad(e);
-    else if (activeBuild === 'road') {
+    else if (dev === 'road') {
+      const next = roadEdges.includes(e) ? roadEdges : [...roadEdges, e];
+      if (next.length >= 2) {
+        commands.playDevCard({ card: 'road_building', edges: next.slice(0, 2) });
+        resetDev();
+      } else setRoadEdges(next);
+    } else if (activeBuild === 'road') {
       commands.buildRoad(e);
       setBuildMode(null);
     }
@@ -109,7 +143,75 @@ export function GameScreen() {
             onCancel={() => setRobberTile(null)}
           />
         )}
+        {dev === 'knight' && (
+          <RobberPanel
+            view={view}
+            tile={knightTile}
+            title="Knight — move the robber"
+            onSteal={(victim) => {
+              if (knightTile != null) commands.playDevCard({ card: 'knight', tile: knightTile, stealFrom: victim });
+              resetDev();
+            }}
+            onCancel={resetDev}
+          />
+        )}
+        {dev === 'road' && (
+          <div className="robber">
+            <div className="robber-title">Road Building — pick {2 - roadEdges.length} road(s)</div>
+            <p className="build-hint">Click highlighted edges.</p>
+            {roadEdges.length === 1 && (
+              <button
+                className="build-btn"
+                onClick={() => {
+                  commands.playDevCard({ card: 'road_building', edges: roadEdges });
+                  resetDev();
+                }}
+              >
+                Place just this one
+              </button>
+            )}
+            <button className="build-btn" onClick={resetDev}>
+              Cancel
+            </button>
+          </div>
+        )}
+        {dev === 'yop' && (
+          <PickResources
+            title="Year of Plenty — take 2"
+            count={2}
+            onConfirm={(resources) => {
+              commands.playDevCard({ card: 'year_of_plenty', resources });
+              resetDev();
+            }}
+            onCancel={resetDev}
+          />
+        )}
+        {dev === 'monopoly' && (
+          <PickResources
+            title="Monopoly — claim all of one"
+            count={1}
+            onConfirm={(resources) => {
+              commands.playDevCard({ card: 'monopoly', resource: resources[0] });
+              resetDev();
+            }}
+            onCancel={resetDev}
+          />
+        )}
         {canBuild && <BuildBar view={view} mode={buildMode} setMode={setBuildMode} />}
+        {view.phase === 'PLAY' && (
+          <DevPanel
+            view={view}
+            canBuy={canBuild}
+            canPlay={!!canPlayDev}
+            onPlay={(card) => {
+              setBuildMode(null);
+              if (card === 'knight') setDevAction('knight');
+              else if (card === 'road_building') setDevAction('road');
+              else if (card === 'year_of_plenty') setDevAction('yop');
+              else if (card === 'monopoly') setDevAction('monopoly');
+            }}
+          />
+        )}
         {canBuild && <BankTrade view={view} />}
         {view.phase === 'PLAY' && <TradePanel view={view} canAct={canBuild} />}
         {error && <p className="error">{error}</p>}
@@ -328,16 +430,18 @@ function RobberPanel({
   tile,
   onSteal,
   onCancel,
+  title = 'Move the robber',
 }: {
   view: GameView;
   tile: number | null;
   onSteal: (victim: string) => void;
   onCancel: () => void;
+  title?: string;
 }) {
   if (tile == null) {
     return (
       <div className="robber">
-        <div className="robber-title">Move the robber</div>
+        <div className="robber-title">{title}</div>
         <p className="build-hint">Click a highlighted tile.</p>
       </div>
     );
@@ -359,6 +463,137 @@ function RobberPanel({
       </div>
       <button className="build-btn" onClick={onCancel}>
         Pick a different tile
+      </button>
+    </div>
+  );
+}
+
+const DEV_LABEL: Record<DevCard, string> = {
+  knight: 'Knight',
+  victory_point: 'Victory Point',
+  road_building: 'Road Building',
+  year_of_plenty: 'Year of Plenty',
+  monopoly: 'Monopoly',
+};
+
+/**
+ * Buy a development card and play the ones you hold. Counts are grouped by type;
+ * a type is playable only if you hold a copy bought on an earlier turn and you
+ * haven't already played a card this turn. Victory-point cards are never played.
+ */
+function DevPanel({
+  view,
+  canBuy,
+  canPlay,
+  onPlay,
+}: {
+  view: GameView;
+  canBuy: boolean;
+  canPlay: boolean;
+  onPlay: (card: DevCard) => void;
+}) {
+  const cards = view.you?.devCards ?? [];
+  const turnNumber = view.turn?.turnNumber ?? 0;
+  const affordable = view.you ? canAfford(view.you.hand, BUILD_COSTS.devCard) : false;
+  const deckLeft = view.devDeckCount;
+
+  // Stable display order, counting copies and the playable (not-bought-this-turn) ones.
+  const order: DevCard[] = ['knight', 'road_building', 'year_of_plenty', 'monopoly', 'victory_point'];
+  const groups = order
+    .map((card) => ({
+      card,
+      count: cards.filter((d) => d.card === card).length,
+      playableNow: cards.some((d) => d.card === card && d.boughtOnTurn !== turnNumber),
+    }))
+    .filter((g) => g.count > 0);
+
+  return (
+    <div className="devpanel">
+      <div className="devpanel-title">Development cards</div>
+      <button
+        className="build-btn"
+        disabled={!canBuy || !affordable || deckLeft === 0}
+        title={deckLeft === 0 ? 'Deck empty' : affordable ? 'Buy a development card' : 'Need sheep + wheat + ore'}
+        onClick={() => commands.buyDevCard()}
+      >
+        Buy card ({deckLeft} left)
+      </button>
+      {groups.length === 0 ? (
+        <p className="build-hint">No development cards yet.</p>
+      ) : (
+        <ul className="devlist">
+          {groups.map(({ card, count, playableNow }) => (
+            <li key={card} className="devlist-row">
+              <span className="dev-name">
+                {DEV_LABEL[card]} ×{count}
+              </span>
+              {card !== 'victory_point' && (
+                <button
+                  className="build-btn"
+                  disabled={!canPlay || !playableNow}
+                  title={playableNow ? `Play ${DEV_LABEL[card]}` : 'Not playable yet'}
+                  onClick={() => onPlay(card)}
+                >
+                  Play
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** A small stepper picker for choosing exactly `count` resource cards (repeats allowed). */
+function PickResources({
+  title,
+  count,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  count: number;
+  onConfirm: (resources: Resource[]) => void;
+  onCancel: () => void;
+}) {
+  const [picks, setPicks] = useState<Partial<Record<Resource, number>>>({});
+  const chosen = RESOURCES.reduce((a, r) => a + (picks[r] ?? 0), 0);
+  const ready = chosen === count;
+  const bump = (res: Resource, delta: number) =>
+    setPicks((prev) => ({ ...prev, [res]: Math.max(0, (prev[res] ?? 0) + delta) }));
+
+  return (
+    <div className="discard">
+      <div className="discard-title">
+        {title} ({chosen}/{count})
+      </div>
+      <div className="discard-rows">
+        {RESOURCES.map((res) => {
+          const picked = picks[res] ?? 0;
+          return (
+            <div key={res} className="discard-row">
+              <span className="discard-res">{RESOURCE_LABEL[res]}</span>
+              <button className="step" disabled={picked === 0} onClick={() => bump(res, -1)}>
+                −
+              </button>
+              <span className="discard-pick">{picked}</span>
+              <button className="step" disabled={chosen >= count} onClick={() => bump(res, 1)}>
+                +
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        className="primary"
+        disabled={!ready}
+        onClick={() => onConfirm(RESOURCES.flatMap((r) => Array<Resource>(picks[r] ?? 0).fill(r)))}
+      >
+        Confirm
+      </button>
+      <button className="build-btn" onClick={onCancel}>
+        Cancel
       </button>
     </div>
   );

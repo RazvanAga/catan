@@ -97,6 +97,18 @@ export interface SetupState {
 
 export type TradeResponse = 'accept' | 'decline';
 
+/**
+ * The parameters for playing a development card (issue 0010), discriminated by
+ * `card`. `victory_point` is absent — VP cards are never played, they just count.
+ * For `knight`, `stolen` is the server-rolled card (data, not RNG in the reducer),
+ * null when the destination tile has no stealable neighbour — mirroring MOVE_ROBBER.
+ */
+export type DevCardPlay =
+  | { card: 'knight'; tile: number; stealFrom: string | null; stolen: Resource | null }
+  | { card: 'road_building'; edges: number[] }
+  | { card: 'year_of_plenty'; resources: Resource[] }
+  | { card: 'monopoly'; resource: Resource };
+
 /** An active player's pending player↔player trade offer (issue 0008). */
 export interface TradeProposal {
   proposer: string;
@@ -191,7 +203,10 @@ export type Action =
   | { type: 'DISCARD'; actorId: string; discard: Partial<ResourceCounts> }
   // `stolen` is the server-rolled card (data, not RNG in the reducer); null when
   // the destination tile has no stealable neighbour.
-  | { type: 'MOVE_ROBBER'; actorId: string; tile: number; stealFrom: string | null; stolen: Resource | null };
+  | { type: 'MOVE_ROBBER'; actorId: string; tile: number; stealFrom: string | null; stolen: Resource | null }
+  // --- Development cards (issue 0010) ---
+  | { type: 'BUY_DEV_CARD'; actorId: string }
+  | { type: 'PLAY_DEV_CARD'; actorId: string; play: DevCardPlay };
 
 /** Append-only narration entries emitted by `reduce`, for toasts/animations. */
 export type GameEvent =
@@ -216,7 +231,14 @@ export type GameEvent =
   | { type: 'ROBBER_MOVED'; playerId: string; tile: number }
   // The stolen resource is deliberately omitted: only the thief and victim learn
   // it, via their own personalized hand deltas in the snapshot. Others see counts.
-  | { type: 'CARD_STOLEN'; from: string; to: string };
+  | { type: 'CARD_STOLEN'; from: string; to: string }
+  // --- Development cards (issue 0010) ---
+  // A bought card's type is hidden: the buyer learns it from their own snapshot.
+  | { type: 'DEV_CARD_BOUGHT'; playerId: string }
+  // Playing a card is public, so the card type is named here.
+  | { type: 'DEV_CARD_PLAYED'; playerId: string; card: DevCard }
+  | { type: 'LARGEST_ARMY'; playerId: string; count: number }
+  | { type: 'MONOPOLY'; playerId: string; resource: Resource; count: number };
 
 export interface ReduceResult {
   state: GameState;

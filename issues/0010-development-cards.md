@@ -1,6 +1,6 @@
 ---
 title: Development cards
-status: ready
+status: done
 type: AFK
 labels: [ready-for-agent]
 created: 2026-06-04
@@ -26,14 +26,14 @@ hidden from opponents until they win.
 
 ## Acceptance criteria
 
-- [ ] The active player can buy a dev card for its cost; the deck order comes from a server-side shuffle and the card is hidden from opponents.
-- [ ] At most one dev card can be played per turn; a card bought this turn cannot be played this turn.
-- [ ] Dev-card play is legal in both `MUST_ROLL` and `ACTIONS`.
-- [ ] Playing a Knight moves the robber and steals (reusing the robber/steal logic) and counts toward Largest Army.
-- [ ] Largest Army (+2 VP) is awarded at 3 knights played and reassigned when surpassed.
-- [ ] Road Building, Year of Plenty, and Monopoly produce their correct effects.
-- [ ] Victory-point dev cards count toward the holder's total but are hidden from opponents (visible only in the holder's own snapshot until a win).
-- [ ] Reducer tests cover buy/hidden, the one-per-turn and not-bought-this-turn guards, each card effect, and Largest Army award/reassignment.
+- [x] The active player can buy a dev card for its cost; the deck order comes from a server-side shuffle and the card is hidden from opponents.
+- [x] At most one dev card can be played per turn; a card bought this turn cannot be played this turn.
+- [x] Dev-card play is legal in both `MUST_ROLL` and `ACTIONS`.
+- [x] Playing a Knight moves the robber and steals (reusing the robber/steal logic) and counts toward Largest Army.
+- [x] Largest Army (+2 VP) is awarded at 3 knights played and reassigned when surpassed.
+- [x] Road Building, Year of Plenty, and Monopoly produce their correct effects.
+- [x] Victory-point dev cards count toward the holder's total but are hidden from opponents (visible only in the holder's own snapshot until a win).
+- [x] Reducer tests cover buy/hidden, the one-per-turn and not-bought-this-turn guards, each card effect, and Largest Army award/reassignment.
 
 ## Blocked by
 

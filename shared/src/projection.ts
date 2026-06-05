@@ -54,6 +54,8 @@ export interface TurnView {
   phase: TurnPhase;
   turnNumber: number;
   lastRoll: [number, number] | null;
+  /** Whether the active player has already played a dev card this turn. */
+  devCardPlayedThisTurn: boolean;
 }
 
 export interface SetupView {
@@ -95,6 +97,8 @@ export interface GameView {
   trade: TradeView | null;
   /** Outstanding forced discards after a 7, or null when none are pending. */
   discard: DiscardView | null;
+  /** Development cards left to buy. */
+  devDeckCount: number;
   winner: string | null;
 }
 
@@ -135,6 +139,7 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
           phase: state.turnPhase,
           turnNumber: state.turnNumber,
           lastRoll: state.lastRoll,
+          devCardPlayedThisTurn: state.devCardPlayedThisTurn,
         }
       : null;
 
@@ -182,6 +187,7 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
     bonuses: state.bonuses,
     trade,
     discard,
+    devDeckCount: state.devDeck.length,
     winner: state.winner,
   };
 }

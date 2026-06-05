@@ -18,8 +18,10 @@
 import { BOARD } from '../board/index.js';
 import {
   Action,
+  BoardState,
   GameEvent,
   GameState,
+  Player,
   Resource,
   ResourceCounts,
   ReduceResult,
@@ -100,10 +102,51 @@ export function discard(state: GameState, action: Extract<Action, { type: 'DISCA
 }
 
 /**
- * The active player moves the robber to a different tile and, if any adjacent
- * opponent holds cards, steals one (the specific card chosen server-side and
- * passed in as `action.stolen`). With an eligible victim available the move must
- * include a steal; with none, `stealFrom`/`stolen` must be null.
+ * Core robber relocation + steal, independent of why the robber is moving (a 7
+ * or a Knight). Validates the destination and the steal, then returns the new
+ * board + players + narration — but does NOT touch `turnPhase`, so each caller
+ * sequences its own flow. With an eligible victim the move must include a steal;
+ * with none, `stealFrom`/`stolen` must be null.
+ */
+export function resolveRobberMove(
+  state: GameState,
+  actorId: string,
+  tile: number,
+  stealFrom: string | null,
+  stolen: Resource | null,
+): { board: BoardState; players: Player[]; events: GameEvent[] } {
+  const board = state.board!;
+  assert(Number.isInteger(tile) && tile >= 0 && tile < BOARD.tiles.length, 'Invalid tile.');
+  assert(tile !== board.robberTile, 'The robber must move to a different tile.');
+
+  const victims = robberVictims(state, tile, actorId);
+  const events: GameEvent[] = [{ type: 'ROBBER_MOVED', playerId: actorId, tile }];
+  let players = state.players;
+
+  if (stealFrom == null) {
+    assert(victims.length === 0, 'You must steal from a player adjacent to the robber.');
+    assert(stolen == null, 'No player was chosen to steal from.');
+  } else {
+    assert(victims.includes(stealFrom), 'You cannot steal from that player.');
+    assert(stolen != null, 'No card was specified to steal.');
+    const victim = requirePlayer(state, stealFrom);
+    assert((victim.hand[stolen] ?? 0) > 0, 'That player does not have that card.');
+
+    players = state.players.map((p) => {
+      if (p.id === stealFrom) return { ...p, hand: addResources(p.hand, { [stolen]: -1 }) };
+      if (p.id === actorId) return { ...p, hand: addResources(p.hand, { [stolen]: 1 }) };
+      return p;
+    });
+    events.push({ type: 'CARD_STOLEN', from: stealFrom, to: actorId });
+  }
+
+  return { board: { ...board, robberTile: tile }, players, events };
+}
+
+/**
+ * The active player moves the robber after a 7. Thin wrapper over
+ * `resolveRobberMove` that gates on the `MOVE_ROBBER` phase and hands control to
+ * `ACTIONS` afterwards.
  */
 export function moveRobber(
   state: GameState,
@@ -113,37 +156,12 @@ export function moveRobber(
   assert(state.turnPhase === 'MOVE_ROBBER', 'You cannot move the robber right now.');
   assert(currentPlayer(state).id === action.actorId, 'Only the active player can move the robber.');
 
-  const board = state.board!;
-  assert(
-    Number.isInteger(action.tile) && action.tile >= 0 && action.tile < BOARD.tiles.length,
-    'Invalid tile.',
+  const { board, players, events } = resolveRobberMove(
+    state,
+    action.actorId,
+    action.tile,
+    action.stealFrom,
+    action.stolen,
   );
-  assert(action.tile !== board.robberTile, 'The robber must move to a different tile.');
-
-  const victims = robberVictims(state, action.tile, action.actorId);
-  const events: GameEvent[] = [{ type: 'ROBBER_MOVED', playerId: action.actorId, tile: action.tile }];
-  let players = state.players;
-
-  if (action.stealFrom == null) {
-    assert(victims.length === 0, 'You must steal from a player adjacent to the robber.');
-    assert(action.stolen == null, 'No player was chosen to steal from.');
-  } else {
-    assert(victims.includes(action.stealFrom), 'You cannot steal from that player.');
-    assert(action.stolen != null, 'No card was specified to steal.');
-    const stolen = action.stolen;
-    const victim = requirePlayer(state, action.stealFrom);
-    assert((victim.hand[stolen] ?? 0) > 0, 'That player does not have that card.');
-
-    players = state.players.map((p) => {
-      if (p.id === action.stealFrom) return { ...p, hand: addResources(p.hand, { [stolen]: -1 }) };
-      if (p.id === action.actorId) return { ...p, hand: addResources(p.hand, { [stolen]: 1 }) };
-      return p;
-    });
-    events.push({ type: 'CARD_STOLEN', from: action.stealFrom, to: action.actorId });
-  }
-
-  return {
-    state: { ...state, board: { ...board, robberTile: action.tile }, players, turnPhase: 'ACTIONS' },
-    events,
-  };
+  return { state: { ...state, board, players, turnPhase: 'ACTIONS' }, events };
 }
