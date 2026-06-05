@@ -50,8 +50,9 @@ an empty lobby for everyone — handy for re-testing without restarting the serv
 
 ## Status
 
-Implemented through **issue 0012**. The shared rules engine is covered by 94
-Vitest tests (`npm test`).
+**v1 feature-complete** (all slices 0002–0014 landed). The shared rules engine is
+covered by 97 Vitest unit tests and the Socket.IO seat lifecycle by 4 server-side
+integration tests — `npm test` runs both.
 
 | Issue | Slice | Done |
 |-------|-------|------|
@@ -66,17 +67,21 @@ Vitest tests (`npm test`).
 | 0010 | Development cards | ✅ |
 | 0011 | Longest Road bonus | ✅ |
 | 0012 | Win condition & victory screen | ✅ |
-| 0013 | Post-game replay & crown | ⬜ |
-| 0014 | Disconnection / reconnection seat lifecycle | ⬜ |
+| 0013 | Post-game replay & crown | ✅ |
+| 0014 | Disconnection / reconnection seat lifecycle | ✅ |
 
 **Playable today:** a full game — lobby → snake-draft setup → roll/produce/end-turn
 → build roads/settlements/cities → bank/port trades → player trades → the 7
 (discard/robber/steal) → development cards → Longest Road & Largest Army bonuses
-→ first to 10 VP wins, with a victory screen revealing every hand. All
-server-enforced with per-player snapshots and a narration event log.
+→ first to 10 VP wins, with a victory screen revealing every hand → the owner's
+"New game" reseats the group with the winner crowned. All server-enforced with
+per-player snapshots and a narration event log.
 
-**Not yet:** post-game replay & winner's crown carry-over (issue 0013) and
-disconnect/reconnect seat lifecycle (issue 0014).
+**Seat lifecycle:** a player who drops mid-game is greyed but keeps their seat
+(reclaimable via their session token); the table only blocks when it actually
+needs that seat's input. After 2 minutes the seat goes *vacant* — claimable by
+anyone (who inherits its full position) and auto-skipped so play continues.
+The vacancy clock is tunable via the `VACANCY_MS` server env var.
 
 Issues 0002 and 0003 are HITL: the architecture (reducer signature, projection
 boundary, message protocol, client store) and the frozen board graph are meant to

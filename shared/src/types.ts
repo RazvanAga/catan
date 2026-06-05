@@ -54,7 +54,12 @@ export interface Player {
   id: string;
   name: string;
   color: PlayerColor;
+  /** Socket-level seat lifecycle (issue 0014). A connected seat is live; a
+   * disconnected one is greyed but still owned by its token; a vacant one (after
+   * a timeout) is claimable by anyone and auto-skips its turn. `connected` is the
+   * fast path most rules read; `vacant` distinguishes the two offline states. */
   connected: boolean;
+  vacant: boolean;
   /** Private hand of resource cards (zeros in the lobby). */
   hand: ResourceCounts;
   /** Private development cards. */
@@ -206,7 +211,13 @@ export type Action =
   | { type: 'MOVE_ROBBER'; actorId: string; tile: number; stealFrom: string | null; stolen: Resource | null }
   // --- Development cards (issue 0010) ---
   | { type: 'BUY_DEV_CARD'; actorId: string }
-  | { type: 'PLAY_DEV_CARD'; actorId: string; play: DevCardPlay };
+  | { type: 'PLAY_DEV_CARD'; actorId: string; play: DevCardPlay }
+  // --- Post-game replay (issue 0013) ---
+  | { type: 'NEW_GAME'; actorId: string }
+  // --- Seat lifecycle (issue 0014); server-issued, never a client intent ---
+  | { type: 'SET_CONNECTED'; playerId: string; connected: boolean }
+  | { type: 'VACATE_SEAT'; playerId: string }
+  | { type: 'SKIP_TURN'; actorId: string };
 
 /** Append-only narration entries emitted by `reduce`, for toasts/animations. */
 export type GameEvent =
@@ -243,7 +254,12 @@ export type GameEvent =
   | { type: 'LONGEST_ROAD'; playerId: string | null; length: number }
   | { type: 'MONOPOLY'; playerId: string; resource: Resource; count: number }
   // The active player reached 10 VP and won; the room transitions to ENDED.
-  | { type: 'GAME_WON'; playerId: string; victoryPoints: number };
+  | { type: 'GAME_WON'; playerId: string; victoryPoints: number }
+  // --- Post-game replay (issue 0013) ---
+  | { type: 'NEW_GAME' }
+  // --- Seat lifecycle (issue 0014) ---
+  | { type: 'SEAT_CONNECTION'; playerId: string; status: 'connected' | 'disconnected' | 'vacant' }
+  | { type: 'TURN_SKIPPED'; playerId: string };
 
 export interface ReduceResult {
   state: GameState;

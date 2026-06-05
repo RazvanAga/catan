@@ -38,6 +38,8 @@ export interface PlayerView {
   name: string;
   color: PlayerColor;
   connected: boolean;
+  /** True once a disconnected seat has timed out and is open for anyone to claim. */
+  vacant: boolean;
   isOwner: boolean;
   /** Total resource cards held (counts only — never which ones). */
   handCount: number;
@@ -124,6 +126,7 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
     name: p.name,
     color: p.color,
     connected: p.connected,
+    vacant: p.vacant,
     isOwner: p.id === owner,
     handCount: sumHand(p.hand),
     devCardCount: p.devCards.length,

@@ -28,6 +28,7 @@ function playState(
     name: id,
     color: COLORS[i],
     connected: true,
+    vacant: false,
     hand: { brick: 0, wood: 0, sheep: 0, wheat: 0, ore: 0 },
     devCards: [],
     knightsPlayed: 0,

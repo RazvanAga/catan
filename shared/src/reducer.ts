@@ -11,7 +11,8 @@
 
 import { Action, GameState, ReduceResult } from './types.js';
 import { IllegalActionError } from './rules/helpers.js';
-import { join, ownerId, startGame } from './rules/lobby.js';
+import { join, newGame, ownerId, startGame } from './rules/lobby.js';
+import { setConnected, skipTurn, vacateSeat } from './rules/seats.js';
 import { placeSetupRoad, placeSetupSettlement } from './rules/setup.js';
 import { endTurn, roll } from './rules/turn.js';
 import { buildCity, buildRoad, buildSettlement } from './rules/build.js';
@@ -104,6 +105,14 @@ function dispatch(state: GameState, action: Action): ReduceResult {
       return buyDevCard(state, action);
     case 'PLAY_DEV_CARD':
       return playDevCard(state, action);
+    case 'NEW_GAME':
+      return newGame(state, action);
+    case 'SET_CONNECTED':
+      return setConnected(state, action);
+    case 'VACATE_SEAT':
+      return vacateSeat(state, action);
+    case 'SKIP_TURN':
+      return skipTurn(state, action);
     default: {
       const _exhaustive: never = action;
       throw new IllegalActionError(`Unknown action: ${(_exhaustive as Action).type}`);

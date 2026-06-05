@@ -251,6 +251,10 @@ button.primary:disabled {
   outline: 1px solid var(--accent);
 }
 
+.roster-row.offline {
+  opacity: 0.5;
+}
+
 .roster-stats {
   display: flex;
   gap: 10px;

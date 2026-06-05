@@ -143,6 +143,10 @@ export const commands = {
     useStore.getState().setError(null);
     socket.emit('playDevCard', { play });
   },
+  newGame() {
+    useStore.getState().setError(null);
+    socket.emit('newGame');
+  },
   resetRoom() {
     socket.emit('resetRoom');
   },

@@ -37,6 +37,7 @@ export function join(state: GameState, action: Extract<Action, { type: 'JOIN' }>
     name,
     color: action.color,
     connected: true,
+    vacant: false,
     hand: emptyHand(),
     devCards: [],
     knightsPlayed: 0,
@@ -91,6 +92,47 @@ export function startGame(
 
   const events: GameEvent[] = [{ type: 'GAME_STARTED', playerCount: players.length }];
   return { state: nextState, events };
+}
+
+/**
+ * "New game" (issue 0013): from the victory screen the owner resets the room
+ * back to a fresh LOBBY, keeping everyone seated with their names and colors.
+ * The just-finished game's winner (`previousWinnerId`, set when the game ended)
+ * is carried over so they wear the crown next game — this memory survives a New
+ * game but not a server restart (it lives only in the in-memory state).
+ */
+export function newGame(state: GameState, action: Extract<Action, { type: 'NEW_GAME' }>): ReduceResult {
+  assert(state.phase === 'ENDED', 'You can only start a new game once the current one has ended.');
+  assert(action.actorId === ownerId(state), 'Cannot start a new game: only the room owner may.');
+
+  // Keep the seats (id/name/color/connection) but clear every per-game hand.
+  const players = state.players.map((p) => ({
+    ...p,
+    hand: emptyHand(),
+    devCards: [],
+    knightsPlayed: 0,
+  }));
+
+  return {
+    state: {
+      phase: 'LOBBY',
+      players,
+      previousWinnerId: state.previousWinnerId,
+      board: null,
+      setup: null,
+      turnIndex: 0,
+      turnPhase: 'MUST_ROLL',
+      turnNumber: 0,
+      lastRoll: null,
+      devDeck: [],
+      devCardPlayedThisTurn: false,
+      bonuses: emptyBonuses(),
+      trade: null,
+      discard: null,
+      winner: null,
+    },
+    events: [{ type: 'NEW_GAME' }],
+  };
 }
 
 export { IllegalActionError };

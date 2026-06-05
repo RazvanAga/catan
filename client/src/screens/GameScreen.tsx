@@ -256,21 +256,24 @@ function BuildBar({
 
 function Banner({ view, myTurn }: { view: GameView; myTurn: boolean }) {
   const current = view.players.find((p) => p.id === view.turn?.currentPlayerId);
+  // A disconnected current player pauses the table; a vacant one is auto-skipped,
+  // so only the disconnected (still-reclaimable) case lingers in the banner.
+  const offline = current && !current.connected && !current.vacant ? ' — disconnected, paused' : '';
   let instruction = '';
   if (view.phase === 'SETUP') {
     const what = view.setup?.pending === 'road' ? 'a road' : 'a settlement';
-    instruction = myTurn ? `Place ${what}.` : `Setup — waiting for ${current?.name ?? '…'}.`;
+    instruction = myTurn ? `Place ${what}.` : `Setup — waiting for ${current?.name ?? '…'}${offline}.`;
   } else if (view.phase === 'PLAY') {
     const phase = view.turn?.phase;
     const iOweDiscard = (view.discard?.required.find((r) => r.playerId === view.youId)?.count ?? 0) > 0;
     if (phase === 'DISCARD') {
       instruction = iOweDiscard ? 'Discard down to half your hand.' : `Waiting on discards…`;
     } else if (phase === 'MOVE_ROBBER') {
-      instruction = myTurn ? 'Move the robber and steal a card.' : `${current?.name ?? '…'} is moving the robber.`;
+      instruction = myTurn ? 'Move the robber and steal a card.' : `${current?.name ?? '…'} is moving the robber${offline}.`;
     } else if (myTurn) {
       instruction = phase === 'MUST_ROLL' ? 'Your turn — roll the dice.' : 'Your turn.';
     } else {
-      instruction = `Waiting for ${current?.name ?? '…'}.`;
+      instruction = `Waiting for ${current?.name ?? '…'}${offline}.`;
     }
   }
   return (
@@ -603,12 +606,19 @@ function Players({ view }: { view: GameView }) {
   return (
     <ul className="roster">
       {view.players.map((p) => (
-        <li key={p.id} className={`roster-row${p.isCurrentTurn ? ' current' : ''}`}>
+        <li
+          key={p.id}
+          className={`roster-row${p.isCurrentTurn ? ' current' : ''}${!p.connected ? ' offline' : ''}`}
+        >
           <span className="dot" style={{ background: COLOR_HEX[p.color] }} />
           <span className="roster-name">
             {p.isPreviousWinner && <span title="previous winner">👑</span>} {p.name}
             {p.id === view.youId && <span className="tag">you</span>}
-            {!p.connected && <span className="tag">offline</span>}
+            {p.vacant ? (
+              <span className="tag" title="seat open — claimable by anyone">vacant</span>
+            ) : (
+              !p.connected && <span className="tag" title="disconnected — reclaimable">offline</span>
+            )}
           </span>
           <span className="roster-stats">
             {view.bonuses.longestRoad === p.id && (

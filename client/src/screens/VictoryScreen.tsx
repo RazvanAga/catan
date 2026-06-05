@@ -1,4 +1,5 @@
 import { useStore } from '../store';
+import { commands } from '../socket';
 import { COLOR_HEX } from '../colors';
 
 /**
@@ -12,6 +13,7 @@ export function VictoryScreen() {
   const byId = new Map(view.players.map((p) => [p.id, p]));
   const ranked = [...scores].sort((a, b) => b.total - a.total);
   const winner = view.winner ? byId.get(view.winner) : undefined;
+  const youAreOwner = view.youId != null && view.youId === view.ownerId;
 
   return (
     <div className="screen center">
@@ -42,7 +44,13 @@ export function VictoryScreen() {
           })}
         </ul>
 
-        <p className="muted">Use “Reset room” to start a new game.</p>
+        {youAreOwner ? (
+          <button className="primary" onClick={() => commands.newGame()}>
+            New game
+          </button>
+        ) : (
+          <p className="muted">Waiting for the owner to start a new game…</p>
+        )}
       </div>
     </div>
   );

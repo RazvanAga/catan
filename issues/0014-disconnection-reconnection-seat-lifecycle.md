@@ -1,6 +1,6 @@
 ---
 title: Disconnection, reconnection & seat lifecycle
-status: ready
+status: done
 type: AFK
 labels: [ready-for-agent]
 created: 2026-06-04
@@ -26,13 +26,13 @@ hand, dev cards). A vacant, unclaimed seat auto-skips its turn so play continues
 
 ## Acceptance criteria
 
-- [ ] A player disconnecting when not blocking does not halt play; their seat is greyed and reclaimable via session token.
-- [ ] A returning player reclaims their exact seat (pieces, hand, dev cards) with their token.
-- [ ] When a disconnected player's input is required (their turn or an owed discard), the game waits with a "waiting for X" banner and does not auto-resolve.
-- [ ] After 2 minutes disconnected, the seat becomes vacant and claimable by anyone (original or newcomer).
-- [ ] A player claiming a vacant seat inherits that seat's full position.
-- [ ] A vacant, unclaimed seat's turn is auto-skipped so play continues.
-- [ ] Integration tests over the Socket.IO seam cover token reclaim, the 2-minute vacancy transition, takeover-inherits-position, and auto-skip of an unclaimed vacant seat.
+- [x] A player disconnecting when not blocking does not halt play; their seat is greyed and reclaimable via session token.
+- [x] A returning player reclaims their exact seat (pieces, hand, dev cards) with their token.
+- [x] When a disconnected player's input is required (their turn or an owed discard), the game waits with a "waiting for X" banner and does not auto-resolve.
+- [x] After 2 minutes disconnected, the seat becomes vacant and claimable by anyone (original or newcomer).
+- [x] A player claiming a vacant seat inherits that seat's full position.
+- [x] A vacant, unclaimed seat's turn is auto-skipped so play continues.
+- [x] Integration tests over the Socket.IO seam cover token reclaim, the 2-minute vacancy transition, takeover-inherits-position, and auto-skip of an unclaimed vacant seat.
 
 ## Blocked by
 

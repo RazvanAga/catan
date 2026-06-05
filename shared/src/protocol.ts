@@ -85,6 +85,8 @@ export interface ClientToServerEvents {
   // --- Development cards (issue 0010) ---
   buyDevCard: () => void;
   playDevCard: (msg: { play: DevCardPlayInput }) => void;
+  // --- Post-game replay (issue 0013) ---
+  newGame: () => void;
   // --- Dev/testing ---
   resetRoom: () => void;
 }

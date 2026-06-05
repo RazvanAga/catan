@@ -1,6 +1,6 @@
 ---
 title: Post-game replay & crown
-status: ready
+status: done
 type: AFK
 labels: [ready-for-agent]
 created: 2026-06-04
@@ -22,11 +22,11 @@ server restart.
 
 ## Acceptance criteria
 
-- [ ] The victory screen shows an owner-only "New game" button.
-- [ ] "New game" resets room state for a fresh game while keeping the same players seated (names + colors retained).
-- [ ] The previous game's winner is marked with a crown in the next game.
-- [ ] The crown / last-winner memory persists across "New game" but is lost on server restart.
-- [ ] Tests cover the reset-and-reseat transition and crown assignment to the prior winner.
+- [x] The victory screen shows an owner-only "New game" button.
+- [x] "New game" resets room state for a fresh game while keeping the same players seated (names + colors retained).
+- [x] The previous game's winner is marked with a crown in the next game.
+- [x] The crown / last-winner memory persists across "New game" but is lost on server restart.
+- [x] Tests cover the reset-and-reseat transition and crown assignment to the prior winner.
 
 ## Blocked by
 
