@@ -1,6 +1,6 @@
 ---
 title: Win condition & victory screen
-status: ready
+status: done
 type: AFK
 labels: [ready-for-agent]
 created: 2026-06-04
@@ -23,12 +23,12 @@ revealed at the win.
 
 ## Acceptance criteria
 
-- [ ] Full VP tally combines settlements, cities, Longest Road, Largest Army, and hidden VP dev cards.
-- [ ] Reaching 10 VP (including hidden VP cards) on the active player's turn ends the game immediately.
-- [ ] The room transitions to `ENDED` and a victory screen naming the winner is shown to all players.
-- [ ] Hidden VP cards are revealed upon the win.
-- [ ] Public VP display reflects all public sources during play.
-- [ ] Reducer tests cover winning via mixed VP sources, including a hidden-VP-card-triggered win.
+- [x] Full VP tally combines settlements, cities, Longest Road, Largest Army, and hidden VP dev cards.
+- [x] Reaching 10 VP (including hidden VP cards) on the active player's turn ends the game immediately.
+- [x] The room transitions to `ENDED` and a victory screen naming the winner is shown to all players.
+- [x] Hidden VP cards are revealed upon the win.
+- [x] Public VP display reflects all public sources during play.
+- [x] Reducer tests cover winning via mixed VP sources, including a hidden-VP-card-triggered win.
 
 ## Blocked by
 

@@ -9,6 +9,7 @@ export {
   publicVictoryPoints,
   hiddenVictoryPoints,
   totalVictoryPoints,
+  checkVictory,
   VP_TO_WIN,
 } from './rules/scoring.js';
 export {

@@ -50,7 +50,7 @@ an empty lobby for everyone — handy for re-testing without restarting the serv
 
 ## Status
 
-Implemented through **issue 0011**. The shared rules engine is covered by 90
+Implemented through **issue 0012**. The shared rules engine is covered by 94
 Vitest tests (`npm test`).
 
 | Issue | Slice | Done |
@@ -65,17 +65,18 @@ Vitest tests (`npm test`).
 | 0009 | The 7 — discard, move robber, steal | ✅ |
 | 0010 | Development cards | ✅ |
 | 0011 | Longest Road bonus | ✅ |
-| 0012 | Win condition & victory screen | ⬜ |
+| 0012 | Win condition & victory screen | ✅ |
 | 0013 | Post-game replay & crown | ⬜ |
 | 0014 | Disconnection / reconnection seat lifecycle | ⬜ |
 
-**Playable today:** lobby → snake-draft setup → roll/produce/end-turn → build
-roads/settlements/cities → bank/port trades → player trades → the 7
-(discard/robber/steal) → development cards → Longest Road & Largest Army bonuses,
-all server-enforced with per-player snapshots and a narration event log.
+**Playable today:** a full game — lobby → snake-draft setup → roll/produce/end-turn
+→ build roads/settlements/cities → bank/port trades → player trades → the 7
+(discard/robber/steal) → development cards → Longest Road & Largest Army bonuses
+→ first to 10 VP wins, with a victory screen revealing every hand. All
+server-enforced with per-player snapshots and a narration event log.
 
-**Not yet:** there is no win condition or victory screen (issue 0012), so a game
-cannot yet be formally *won* even though a player can reach 10 VP.
+**Not yet:** post-game replay & winner's crown carry-over (issue 0013) and
+disconnect/reconnect seat lifecycle (issue 0014).
 
 Issues 0002 and 0003 are HITL: the architecture (reducer signature, projection
 boundary, message protocol, client store) and the frozen board graph are meant to

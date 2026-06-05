@@ -241,7 +241,9 @@ export type GameEvent =
   // Longest Road changed hands (issue 0011). `playerId` is null when the bonus
   // is revoked (no one currently holds a road of length >= 5).
   | { type: 'LONGEST_ROAD'; playerId: string | null; length: number }
-  | { type: 'MONOPOLY'; playerId: string; resource: Resource; count: number };
+  | { type: 'MONOPOLY'; playerId: string; resource: Resource; count: number }
+  // The active player reached 10 VP and won; the room transitions to ENDED.
+  | { type: 'GAME_WON'; playerId: string; victoryPoints: number };
 
 export interface ReduceResult {
   state: GameState;

@@ -5,7 +5,7 @@
  * 0012) uses the total including hidden cards.
  */
 
-import { GameState, Player } from '../types.js';
+import { GameEvent, GameState, Player } from '../types.js';
 
 export const VP_TO_WIN = 10;
 
@@ -35,4 +35,24 @@ export function hiddenVictoryPoints(player: Player): number {
 /** Full VP total including hidden cards — the win threshold is checked on this. */
 export function totalVictoryPoints(state: GameState, player: Player): number {
   return publicVictoryPoints(state, player.id) + hiddenVictoryPoints(player);
+}
+
+/**
+ * End the game if the active player has reached the win threshold. A player can
+ * only win on their own turn, so we check just the player whose turn it is, on
+ * their full total (public sources + hidden VP cards). Returns the ENDED state
+ * and the win event, or null if no one has won yet. Called centrally by `reduce`
+ * after every action, so any VP-changing move (build, a Largest Army / Longest
+ * Road swing, or even drawing a hidden VP card) can trigger the win.
+ */
+export function checkVictory(state: GameState): { state: GameState; event: GameEvent } | null {
+  if (state.phase !== 'PLAY') return null;
+  const active = state.players[state.turnIndex];
+  if (!active) return null;
+  const vp = totalVictoryPoints(state, active);
+  if (vp < VP_TO_WIN) return null;
+  return {
+    state: { ...state, phase: 'ENDED', winner: active.id, previousWinnerId: active.id },
+    event: { type: 'GAME_WON', playerId: active.id, victoryPoints: vp },
+  };
 }

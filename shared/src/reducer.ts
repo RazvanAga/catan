@@ -20,6 +20,7 @@ import { cancelTrade, confirmTrade, proposeTrade, respondTrade } from './rules/p
 import { discard, moveRobber } from './rules/robber.js';
 import { buyDevCard, playDevCard } from './rules/dev.js';
 import { recomputeLongestRoad } from './rules/longestRoad.js';
+import { checkVictory } from './rules/scoring.js';
 
 export { IllegalActionError, ownerId };
 
@@ -45,15 +46,23 @@ export function initialState(): GameState {
 }
 
 export function reduce(state: GameState, action: Action): ReduceResult {
-  const result = dispatch(state, action);
+  let result = dispatch(state, action);
+
   // Any action that changes the board (a road or a settlement that splits one)
   // can shift the Longest Road bonus. Re-evaluate once, centrally, and merge.
   if (result.state.board && result.state.board !== state.board) {
     const { bonuses, events } = recomputeLongestRoad(result.state);
     if (bonuses !== result.state.bonuses) {
-      return { state: { ...result.state, bonuses }, events: [...result.events, ...events] };
+      result = { state: { ...result.state, bonuses }, events: [...result.events, ...events] };
     }
   }
+
+  // After every VP-changing move, see if the active player has just won.
+  const won = checkVictory(result.state);
+  if (won) {
+    result = { state: won.state, events: [...result.events, won.event] };
+  }
+
   return result;
 }
 

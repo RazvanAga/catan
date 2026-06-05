@@ -3,6 +3,7 @@ import { commands } from './socket';
 import { JoinScreen } from './screens/JoinScreen';
 import { LobbyScreen } from './screens/LobbyScreen';
 import { GameScreen } from './screens/GameScreen';
+import { VictoryScreen } from './screens/VictoryScreen';
 import { BlockedScreen } from './screens/BlockedScreen';
 
 /**
@@ -34,6 +35,8 @@ function Screen() {
   }
 
   if (view.phase === 'SETUP' || view.phase === 'PLAY') return <GameScreen />;
+
+  if (view.phase === 'ENDED') return <VictoryScreen />;
 
   // LOBBY: show the join form until this client holds a seat, then the roster.
   return view.seated ? <LobbyScreen /> : <JoinScreen />;

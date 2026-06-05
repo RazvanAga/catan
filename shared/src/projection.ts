@@ -22,6 +22,17 @@ import {
 import { ownerId } from './reducer.js';
 import { hiddenVictoryPoints, publicVictoryPoints, totalVictoryPoints } from './rules/scoring.js';
 
+/**
+ * A player's full final tally, revealed to everyone once the game has ENDED.
+ * Until then hidden VP cards stay secret, so this is null during LOBBY/SETUP/PLAY.
+ */
+export interface FinalScore {
+  playerId: string;
+  total: number;
+  publicVictoryPoints: number;
+  hiddenVictoryPoints: number;
+}
+
 export interface PlayerView {
   id: string;
   name: string;
@@ -100,6 +111,8 @@ export interface GameView {
   /** Development cards left to buy. */
   devDeckCount: number;
   winner: string | null;
+  /** Full VP breakdown per player, revealed only once the game has ENDED. */
+  finalScores: FinalScore[] | null;
 }
 
 export function projectStateForPlayer(state: GameState, playerId: string | null): GameView {
@@ -173,6 +186,16 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
       }
     : null;
 
+  const finalScores: FinalScore[] | null =
+    state.phase === 'ENDED'
+      ? state.players.map((p) => ({
+          playerId: p.id,
+          total: totalVictoryPoints(state, p),
+          publicVictoryPoints: publicVictoryPoints(state, p.id),
+          hiddenVictoryPoints: hiddenVictoryPoints(p),
+        }))
+      : null;
+
   return {
     phase: state.phase,
     players,
@@ -189,6 +212,7 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
     discard,
     devDeckCount: state.devDeck.length,
     winner: state.winner,
+    finalScores,
   };
 }
 
