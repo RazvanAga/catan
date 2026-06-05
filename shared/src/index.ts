@@ -19,3 +19,5 @@ export {
   canAfford,
 } from './rules/helpers.js';
 export { portsForPlayer, bestBankRatio } from './rules/trade.js';
+export { pickRandomCard } from './rules/robber.js';
+export { robberVictims } from './rules/helpers.js';

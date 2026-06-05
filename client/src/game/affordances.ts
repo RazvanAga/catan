@@ -119,3 +119,32 @@ export function bankRatio(view: GameView, give: Resource): number {
   if (ports.has('3:1')) return 3;
   return 4;
 }
+
+/** Tiles the robber may be moved to (any tile other than where it sits now). */
+export function legalRobberTiles(view: GameView): Set<number> {
+  const out = new Set<number>();
+  const board = view.board;
+  if (!board) return out;
+  for (let t = 0; t < BOARD.tiles.length; t++) {
+    if (t !== board.robberTile) out.add(t);
+  }
+  return out;
+}
+
+/**
+ * Players the active player could steal from if the robber moved to `tile`:
+ * owners of a building on the tile (other than the active player) who hold cards.
+ * Computed from public data only (placed buildings + public hand counts).
+ */
+export function robberVictimsAt(view: GameView, tile: number): string[] {
+  const board = view.board;
+  if (!board || !view.youId) return [];
+  const owners = new Set<string>();
+  for (const vid of BOARD.tiles[tile].vertices) {
+    const b = board.buildings[vid];
+    if (b && b.owner !== view.youId) owners.add(b.owner);
+  }
+  return view.players
+    .filter((p) => owners.has(p.id) && p.handCount > 0)
+    .map((p) => p.id);
+}

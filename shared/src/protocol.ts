@@ -66,6 +66,11 @@ export interface ClientToServerEvents {
   respondTrade: (msg: { response: TradeResponse }) => void;
   confirmTrade: (msg: { partnerId: string }) => void;
   cancelTrade: () => void;
+  // --- The 7: discard, move robber, steal (issue 0009) ---
+  discard: (msg: { resources: Partial<ResourceCounts> }) => void;
+  // The server picks which card is stolen (RNG); the client only names the tile
+  // and the victim (null when the chosen tile has no stealable neighbour).
+  moveRobber: (msg: { tile: number; stealFrom: string | null }) => void;
   // --- Dev/testing ---
   resetRoom: () => void;
 }

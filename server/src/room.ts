@@ -11,8 +11,10 @@ import {
   Action,
   GameEvent,
   GameState,
+  Resource,
   ServerToClientEvents,
   initialState,
+  pickRandomCard,
   projectStateForPlayer,
   reduce,
 } from '@catan/shared';
@@ -42,6 +44,16 @@ export class Room {
   /** The seat a returning token owns, if any. */
   seatForToken(token: string): string | null {
     return this.tokenToPlayerId.get(token) ?? null;
+  }
+
+  /**
+   * Pick the card to steal from `victimId`, server-side (the one piece of robber
+   * RNG). The reducer stays pure and re-validates the choice; this just reads the
+   * authoritative hand the projection never exposes. Null if the victim is empty.
+   */
+  pickStolenCard(victimId: string): Resource | null {
+    const victim = this.state.players.find((p) => p.id === victimId);
+    return victim ? pickRandomCard(victim.hand) : null;
   }
 
   bindToken(token: string, playerId: string): void {

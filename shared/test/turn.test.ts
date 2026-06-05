@@ -27,9 +27,9 @@ describe('ROLL gating', () => {
     const other = state.players[1].id;
     expect(() => reduce(state, { type: 'ROLL', actorId: other, dice: [3, 4] })).toThrow(/not your turn/i);
 
-    const rolled = reduce(state, { type: 'ROLL', actorId: 'p1', dice: [3, 4] }).state;
+    const rolled = reduce(state, { type: 'ROLL', actorId: 'p1', dice: [2, 3] }).state;
     expect(rolled.turnPhase).toBe('ACTIONS');
-    expect(rolled.lastRoll).toEqual([3, 4]);
+    expect(rolled.lastRoll).toEqual([2, 3]);
     expect(() => reduce(rolled, { type: 'ROLL', actorId: 'p1', dice: [2, 2] })).toThrow(/already rolled/);
   });
 });
@@ -51,20 +51,22 @@ describe('production', () => {
     expect(after).toBeGreaterThanOrEqual(before + 1);
   });
 
-  it('produces nothing on a 7 (placeholder for the robber slice)', () => {
+  it('produces nothing on a 7 and enters the robber flow', () => {
+    // Fresh after setup everyone holds 0 cards, so nobody owes a discard and the
+    // active player goes straight to moving the robber (full 7 flow in robber.test.ts).
     const state = playThroughSetup(['p1', 'p2', 'p3']);
     const handsBefore = state.players.map((p) => ({ ...p.hand }));
     const res = reduce(state, { type: 'ROLL', actorId: 'p1', dice: [3, 4] });
-    expect(res.events.some((e) => e.type === 'NO_PRODUCTION')).toBe(true);
+    expect(res.events.some((e) => e.type === 'RESOURCES_GRANTED')).toBe(false);
     res.state.players.forEach((p, i) => expect(p.hand).toEqual(handsBefore[i]));
-    expect(res.state.turnPhase).toBe('ACTIONS');
+    expect(res.state.turnPhase).toBe('MOVE_ROBBER');
   });
 });
 
 describe('END_TURN', () => {
   it('passes play to the next player and resets to MUST_ROLL', () => {
     let state = playThroughSetup(['p1', 'p2', 'p3']);
-    state = reduce(state, { type: 'ROLL', actorId: 'p1', dice: [3, 4] }).state;
+    state = reduce(state, { type: 'ROLL', actorId: 'p1', dice: [2, 3] }).state;
     expect(() => reduce(state, { type: 'END_TURN', actorId: 'p2' })).toThrow(/not your turn/i);
 
     const ended = reduce(state, { type: 'END_TURN', actorId: 'p1' });
@@ -81,7 +83,7 @@ describe('END_TURN', () => {
   it('wraps around to the first player', () => {
     let state = playThroughSetup(['p1', 'p2', 'p3']);
     for (const id of ['p1', 'p2', 'p3']) {
-      state = reduce(state, { type: 'ROLL', actorId: id, dice: [3, 4] }).state;
+      state = reduce(state, { type: 'ROLL', actorId: id, dice: [2, 3] }).state;
       state = reduce(state, { type: 'END_TURN', actorId: id }).state;
     }
     expect(state.players[state.turnIndex].id).toBe('p1');

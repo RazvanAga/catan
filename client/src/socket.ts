@@ -126,6 +126,14 @@ export const commands = {
     useStore.getState().setError(null);
     socket.emit('cancelTrade');
   },
+  discard(resources: Partial<Record<Resource, number>>) {
+    useStore.getState().setError(null);
+    socket.emit('discard', { resources });
+  },
+  moveRobber(tile: number, stealFrom: string | null) {
+    useStore.getState().setError(null);
+    socket.emit('moveRobber', { tile, stealFrom });
+  },
   resetRoom() {
     socket.emit('resetRoom');
   },

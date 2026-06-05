@@ -70,6 +70,15 @@ export interface TradeView {
   responses: { playerId: string; response: TradeResponse }[];
 }
 
+/**
+ * Pending forced discards after a 7: each listed player still owes `count`
+ * cards. Counts only — derivable from public hand sizes anyway, so this leaks
+ * nothing. Lets every client show who the table is waiting on.
+ */
+export interface DiscardView {
+  required: { playerId: string; count: number }[];
+}
+
 export interface GameView {
   phase: RoomPhase;
   players: PlayerView[];
@@ -84,6 +93,8 @@ export interface GameView {
   setup: SetupView | null;
   bonuses: Bonuses;
   trade: TradeView | null;
+  /** Outstanding forced discards after a 7, or null when none are pending. */
+  discard: DiscardView | null;
   winner: string | null;
 }
 
@@ -148,6 +159,15 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
       }
     : null;
 
+  const discard: DiscardView | null = state.discard
+    ? {
+        required: Object.entries(state.discard.required).map(([pid, count]) => ({
+          playerId: pid,
+          count,
+        })),
+      }
+    : null;
+
   return {
     phase: state.phase,
     players,
@@ -161,6 +181,7 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
     setup,
     bonuses: state.bonuses,
     trade,
+    discard,
     winner: state.winner,
   };
 }

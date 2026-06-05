@@ -16,8 +16,10 @@ import {
   canAffordBuild,
   isMyTurn,
   legalBuildTargets,
+  legalRobberTiles,
   legalSetupRoads,
   legalSetupSettlements,
+  robberVictimsAt,
 } from '../game/affordances';
 import { TradePanel } from './TradePanel';
 import { COLOR_HEX, RESOURCE_LABEL } from '../colors';
@@ -27,21 +29,37 @@ export function GameScreen() {
   const error = useStore((s) => s.error);
   const myTurn = isMyTurn(view);
   const [buildMode, setBuildMode] = useState<BuildKind | null>(null);
+  // When the robber lands on a tile with multiple stealable players, hold the
+  // chosen tile here until the active player picks whom to steal from.
+  const [robberTile, setRobberTile] = useState<number | null>(null);
 
-  const canBuild = view.phase === 'PLAY' && myTurn && view.turn?.phase === 'ACTIONS';
+  const phase = view.turn?.phase;
+  const mustMoveRobber = view.phase === 'PLAY' && myTurn && phase === 'MOVE_ROBBER';
+  const canBuild = view.phase === 'PLAY' && myTurn && phase === 'ACTIONS';
   const activeBuild = canBuild ? buildMode : null;
 
   let highlightVertices: Set<number> | undefined;
   let highlightEdges: Set<number> | undefined;
+  let highlightTiles: Set<number> | undefined;
   if (view.phase === 'SETUP' && myTurn) {
     if (view.setup?.pending === 'settlement') highlightVertices = legalSetupSettlements(view);
     else highlightEdges = legalSetupRoads(view);
+  } else if (mustMoveRobber) {
+    highlightTiles = legalRobberTiles(view);
   } else if (activeBuild === 'road') {
     highlightEdges = legalBuildTargets(view, 'road');
   } else if (activeBuild === 'settlement') {
     highlightVertices = legalBuildTargets(view, 'settlement');
   } else if (activeBuild === 'city') {
     highlightVertices = legalBuildTargets(view, 'city');
+  }
+
+  function onTileClick(tile: number) {
+    if (!mustMoveRobber) return;
+    const victims = robberVictimsAt(view, tile);
+    if (victims.length === 0) commands.moveRobber(tile, null);
+    else if (victims.length === 1) commands.moveRobber(tile, victims[0]);
+    else setRobberTile(tile); // multiple targets — ask whom to steal from
   }
 
   function onVertexClick(v: number) {
@@ -69,14 +87,28 @@ export function GameScreen() {
           view={view}
           highlightVertices={highlightVertices}
           highlightEdges={highlightEdges}
+          highlightTiles={highlightTiles}
           onVertexClick={onVertexClick}
           onEdgeClick={onEdgeClick}
+          onTileClick={onTileClick}
         />
       </div>
 
       <aside className="sidebar">
         <Banner view={view} myTurn={myTurn} />
         {view.phase === 'PLAY' && <ActionBar view={view} myTurn={myTurn} />}
+        {view.phase === 'PLAY' && <DiscardPanel view={view} />}
+        {mustMoveRobber && (
+          <RobberPanel
+            view={view}
+            tile={robberTile}
+            onSteal={(victim) => {
+              if (robberTile != null) commands.moveRobber(robberTile, victim);
+              setRobberTile(null);
+            }}
+            onCancel={() => setRobberTile(null)}
+          />
+        )}
         {canBuild && <BuildBar view={view} mode={buildMode} setMode={setBuildMode} />}
         {canBuild && <BankTrade view={view} />}
         {view.phase === 'PLAY' && <TradePanel view={view} canAct={canBuild} />}
@@ -127,11 +159,17 @@ function Banner({ view, myTurn }: { view: GameView; myTurn: boolean }) {
     const what = view.setup?.pending === 'road' ? 'a road' : 'a settlement';
     instruction = myTurn ? `Place ${what}.` : `Setup — waiting for ${current?.name ?? '…'}.`;
   } else if (view.phase === 'PLAY') {
-    instruction = myTurn
-      ? view.turn?.phase === 'MUST_ROLL'
-        ? 'Your turn — roll the dice. (Actions arrive in a later slice.)'
-        : 'Your turn.'
-      : `Waiting for ${current?.name ?? '…'}.`;
+    const phase = view.turn?.phase;
+    const iOweDiscard = (view.discard?.required.find((r) => r.playerId === view.youId)?.count ?? 0) > 0;
+    if (phase === 'DISCARD') {
+      instruction = iOweDiscard ? 'Discard down to half your hand.' : `Waiting on discards…`;
+    } else if (phase === 'MOVE_ROBBER') {
+      instruction = myTurn ? 'Move the robber and steal a card.' : `${current?.name ?? '…'} is moving the robber.`;
+    } else if (myTurn) {
+      instruction = phase === 'MUST_ROLL' ? 'Your turn — roll the dice.' : 'Your turn.';
+    } else {
+      instruction = `Waiting for ${current?.name ?? '…'}.`;
+    }
   }
   return (
     <div className={`banner${myTurn ? ' active' : ''}`}>
@@ -204,6 +242,123 @@ function BankTrade({ view }: { view: GameView }) {
         onClick={() => commands.tradeBank(give, receive)}
       >
         Trade {ratio} → 1
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Forced discard after a 7. Shown to a player who still owes a discard; the
+ * player picks exactly `count` cards from their hand and submits. If a discard
+ * is pending but this player doesn't owe one, we just show who we're waiting on.
+ */
+function DiscardPanel({ view }: { view: GameView }) {
+  const owed = view.discard?.required.find((r) => r.playerId === view.youId)?.count ?? 0;
+  const [picks, setPicks] = useState<Partial<Record<Resource, number>>>({});
+
+  if (!view.discard) return null;
+
+  if (owed === 0) {
+    const waiting = view.discard.required
+      .map((r) => view.players.find((p) => p.id === r.playerId)?.name ?? '…')
+      .join(', ');
+    return (
+      <div className="discard">
+        <div className="discard-title">Discarding…</div>
+        <p className="build-hint">Waiting for: {waiting}</p>
+      </div>
+    );
+  }
+
+  const hand = view.you?.hand;
+  const chosen = RESOURCES.reduce((a, r) => a + (picks[r] ?? 0), 0);
+  const ready = chosen === owed;
+  const bump = (res: Resource, delta: number) =>
+    setPicks((prev) => {
+      const max = hand?.[res] ?? 0;
+      const next = Math.max(0, Math.min(max, (prev[res] ?? 0) + delta));
+      return { ...prev, [res]: next };
+    });
+
+  return (
+    <div className="discard">
+      <div className="discard-title">
+        Discard {owed} card{owed === 1 ? '' : 's'} ({chosen}/{owed})
+      </div>
+      <div className="discard-rows">
+        {RESOURCES.map((res) => {
+          const have = hand?.[res] ?? 0;
+          const picked = picks[res] ?? 0;
+          return (
+            <div key={res} className="discard-row">
+              <span className="discard-res">{RESOURCE_LABEL[res]}</span>
+              <span className="discard-have">×{have}</span>
+              <button className="step" disabled={picked === 0} onClick={() => bump(res, -1)}>
+                −
+              </button>
+              <span className="discard-pick">{picked}</span>
+              <button className="step" disabled={picked >= have || chosen >= owed} onClick={() => bump(res, 1)}>
+                +
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        className="primary"
+        disabled={!ready}
+        onClick={() => {
+          commands.discard(picks);
+          setPicks({});
+        }}
+      >
+        Discard
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Robber move: tiles are clicked on the board. When the chosen tile has several
+ * stealable players, this panel asks which one to rob; otherwise it just shows a
+ * hint (a lone or absent victim is resolved automatically on the tile click).
+ */
+function RobberPanel({
+  view,
+  tile,
+  onSteal,
+  onCancel,
+}: {
+  view: GameView;
+  tile: number | null;
+  onSteal: (victim: string) => void;
+  onCancel: () => void;
+}) {
+  if (tile == null) {
+    return (
+      <div className="robber">
+        <div className="robber-title">Move the robber</div>
+        <p className="build-hint">Click a highlighted tile.</p>
+      </div>
+    );
+  }
+  const victims = robberVictimsAt(view, tile);
+  return (
+    <div className="robber">
+      <div className="robber-title">Steal from…</div>
+      <div className="robber-victims">
+        {victims.map((id) => {
+          const p = view.players.find((pl) => pl.id === id);
+          if (!p) return null;
+          return (
+            <button key={id} className="build-btn" onClick={() => onSteal(id)}>
+              <span className="dot" style={{ background: COLOR_HEX[p.color] }} /> {p.name} (🂠 {p.handCount})
+            </button>
+          );
+        })}
+      </div>
+      <button className="build-btn" onClick={onCancel}>
+        Pick a different tile
       </button>
     </div>
   );

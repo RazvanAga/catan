@@ -97,6 +97,23 @@ export function edgeEndpoints(edge: number): [number, number] {
   return BOARD.edges[edge].vertices;
 }
 
+/**
+ * Players the active player may steal from when the robber lands on `tile`:
+ * owners of a settlement/city on one of the tile's corners, excluding the active
+ * player, who still hold at least one resource card. Order follows seating.
+ */
+export function robberVictims(state: GameState, tile: number, actorId: string): string[] {
+  const board = state.board!;
+  const owners = new Set<string>();
+  for (const vid of BOARD.tiles[tile].vertices) {
+    const building = board.buildings[vid];
+    if (building && building.owner !== actorId) owners.add(building.owner);
+  }
+  return state.players
+    .filter((p) => owners.has(p.id) && handTotal(p.hand) > 0)
+    .map((p) => p.id);
+}
+
 /** Edges sharing a vertex with `edge`. */
 export function adjacentEdges(edge: number): number[] {
   const [a, b] = edgeEndpoints(edge);

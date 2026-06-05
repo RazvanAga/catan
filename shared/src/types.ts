@@ -108,6 +108,18 @@ export interface TradeProposal {
   responses: Record<string, TradeResponse>;
 }
 
+/**
+ * Pending forced discards after a 7 (issue 0009). The active player's roll fans
+ * out an obligation to every player holding >7 cards; `required` maps each such
+ * player id to how many cards they must still discard. Entries are removed as
+ * players submit, and the whole struct clears (and play advances to
+ * `MOVE_ROBBER`) once it is empty. Kept explicit so a seat driver — human UI or
+ * a future bot — can read "what does this seat owe?" without re-deriving it.
+ */
+export interface DiscardState {
+  required: Record<string, number>;
+}
+
 export interface Bonuses {
   longestRoad: string | null;
   longestRoadLength: number;
@@ -138,6 +150,8 @@ export interface GameState {
   bonuses: Bonuses;
   /** The active player's open player-trade offer, or null. */
   trade: TradeProposal | null;
+  /** Outstanding forced discards after a 7, or null when none are pending. */
+  discard: DiscardState | null;
   winner: string | null;
 }
 
@@ -172,7 +186,12 @@ export type Action =
   | { type: 'PROPOSE_TRADE'; actorId: string; give: Partial<ResourceCounts>; want: Partial<ResourceCounts> }
   | { type: 'RESPOND_TRADE'; actorId: string; response: TradeResponse }
   | { type: 'CONFIRM_TRADE'; actorId: string; partnerId: string }
-  | { type: 'CANCEL_TRADE'; actorId: string };
+  | { type: 'CANCEL_TRADE'; actorId: string }
+  // --- The 7: discard, move robber, steal (issue 0009) ---
+  | { type: 'DISCARD'; actorId: string; discard: Partial<ResourceCounts> }
+  // `stolen` is the server-rolled card (data, not RNG in the reducer); null when
+  // the destination tile has no stealable neighbour.
+  | { type: 'MOVE_ROBBER'; actorId: string; tile: number; stealFrom: string | null; stolen: Resource | null };
 
 /** Append-only narration entries emitted by `reduce`, for toasts/animations. */
 export type GameEvent =
@@ -184,14 +203,20 @@ export type GameEvent =
   | { type: 'SETUP_COMPLETE' }
   | { type: 'TURN_STARTED'; playerId: string; turnNumber: number }
   | { type: 'DICE_ROLLED'; playerId: string; dice: [number, number]; total: number }
-  | { type: 'NO_PRODUCTION'; total: number }
   | { type: 'TURN_ENDED'; playerId: string }
   | { type: 'CITY_BUILT'; playerId: string; vertex: number }
   | { type: 'BANK_TRADE'; playerId: string; give: Resource; count: number; receive: Resource }
   | { type: 'TRADE_PROPOSED'; proposer: string }
   | { type: 'TRADE_RESPONDED'; playerId: string; response: TradeResponse }
   | { type: 'TRADE_CONFIRMED'; proposer: string; partnerId: string }
-  | { type: 'TRADE_CANCELLED'; proposer: string };
+  | { type: 'TRADE_CANCELLED'; proposer: string }
+  // --- The 7 (issue 0009) ---
+  | { type: 'DISCARD_REQUIRED'; playerId: string; count: number }
+  | { type: 'CARDS_DISCARDED'; playerId: string; resources: Partial<ResourceCounts> }
+  | { type: 'ROBBER_MOVED'; playerId: string; tile: number }
+  // The stolen resource is deliberately omitted: only the thief and victim learn
+  // it, via their own personalized hand deltas in the snapshot. Others see counts.
+  | { type: 'CARD_STOLEN'; from: string; to: string };
 
 export interface ReduceResult {
   state: GameState;

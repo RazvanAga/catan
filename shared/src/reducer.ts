@@ -17,6 +17,7 @@ import { endTurn, roll } from './rules/turn.js';
 import { buildCity, buildRoad, buildSettlement } from './rules/build.js';
 import { tradeBank } from './rules/trade.js';
 import { cancelTrade, confirmTrade, proposeTrade, respondTrade } from './rules/playertrade.js';
+import { discard, moveRobber } from './rules/robber.js';
 
 export { IllegalActionError, ownerId };
 
@@ -36,6 +37,7 @@ export function initialState(): GameState {
     devCardPlayedThisTurn: false,
     bonuses: { longestRoad: null, longestRoadLength: 0, largestArmy: null, largestArmyCount: 0 },
     trade: null,
+    discard: null,
     winner: null,
   };
 }
@@ -70,6 +72,10 @@ export function reduce(state: GameState, action: Action): ReduceResult {
       return confirmTrade(state, action);
     case 'CANCEL_TRADE':
       return cancelTrade(state, action);
+    case 'DISCARD':
+      return discard(state, action);
+    case 'MOVE_ROBBER':
+      return moveRobber(state, action);
     default: {
       const _exhaustive: never = action;
       throw new IllegalActionError(`Unknown action: ${(_exhaustive as Action).type}`);

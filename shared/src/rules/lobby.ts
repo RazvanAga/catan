@@ -85,6 +85,7 @@ export function startGame(
     devCardPlayedThisTurn: false,
     bonuses: emptyBonuses(),
     trade: null,
+    discard: null,
     winner: null,
   };
 

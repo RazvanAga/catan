@@ -124,6 +124,19 @@ io.on('connection', (socket) => {
   socket.on('confirmTrade', ({ partnerId }) => act((pid) => ({ type: 'CONFIRM_TRADE', actorId: pid, partnerId })));
   socket.on('cancelTrade', () => act((pid) => ({ type: 'CANCEL_TRADE', actorId: pid })));
 
+  socket.on('discard', ({ resources }) => act((pid) => ({ type: 'DISCARD', actorId: pid, discard: resources })));
+  // The active player names the tile and (if any) the victim; the server rolls
+  // which card is taken, so the stolen card is never the client's to choose.
+  socket.on('moveRobber', ({ tile, stealFrom }) =>
+    act((pid) => ({
+      type: 'MOVE_ROBBER',
+      actorId: pid,
+      tile,
+      stealFrom: stealFrom ?? null,
+      stolen: stealFrom ? room.pickStolenCard(stealFrom) : null,
+    })),
+  );
+
   // Dev/testing convenience: wipe the room back to an empty lobby and tell every
   // client to re-auth (so even "game in progress" tabs return to the join screen).
   socket.on('resetRoom', () => {

@@ -14,8 +14,10 @@ interface BoardProps {
   view: GameView;
   highlightVertices?: Set<number>;
   highlightEdges?: Set<number>;
+  highlightTiles?: Set<number>;
   onVertexClick?: (vertex: number) => void;
   onEdgeClick?: (edge: number) => void;
+  onTileClick?: (tile: number) => void;
 }
 
 function colorOf(view: GameView, playerId: string): string {
@@ -27,8 +29,10 @@ export function Board({
   view,
   highlightVertices,
   highlightEdges,
+  highlightTiles,
   onVertexClick,
   onEdgeClick,
+  onTileClick,
 }: BoardProps) {
   const board = view.board;
 
@@ -159,6 +163,26 @@ export function Board({
           strokeWidth={1.5}
         />
       </g>
+
+      {/* Tile highlights (clickable — robber placement) */}
+      {[...(highlightTiles ?? [])].map((tileId) => {
+        const tile = BOARD.tiles[tileId];
+        const points = tile.vertices
+          .map((vid) => `${BOARD.vertices[vid].pixel.x},${BOARD.vertices[vid].pixel.y}`)
+          .join(' ');
+        return (
+          <polygon
+            key={`ht${tileId}`}
+            points={points}
+            fill="#ffffff"
+            fillOpacity={0.35}
+            stroke="#fff"
+            strokeWidth={3}
+            className="clickable"
+            onClick={() => onTileClick?.(tileId)}
+          />
+        );
+      })}
 
       {/* Buildings */}
       {Object.entries(board.buildings).map(([vid, b]) => {

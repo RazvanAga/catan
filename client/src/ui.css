@@ -362,6 +362,72 @@ button.primary:disabled {
   color: var(--muted);
 }
 
+.discard,
+.robber {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.discard-title,
+.robber-title {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.discard-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.discard-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.discard-res {
+  flex: 1;
+  font-size: 0.85rem;
+}
+
+.discard-have {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.discard-pick {
+  width: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.step {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: #1a2330;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.step:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.robber-victims {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .banktrade {
   background: var(--card);
   border: 1px solid var(--border);

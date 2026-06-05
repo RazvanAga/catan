@@ -4,8 +4,8 @@
  * The active player rolls once (the server supplies the dice as action data);
  * every player collects resources from tiles matching the total that are
  * adjacent to their settlements (1 each) and cities (2 each), excluding the
- * robber's tile. A 7 yields no production in this slice (the full robber flow
- * is issue 0009). "End turn" passes play to the next player.
+ * robber's tile. A 7 produces nothing and instead triggers the discard/robber
+ * flow (see rules/robber.ts). "End turn" passes play to the next player.
  */
 
 import { BOARD, isProducing } from '../board/index.js';
@@ -16,7 +16,7 @@ import {
   ResourceCounts,
   ReduceResult,
 } from '../types.js';
-import { addResources, assert, currentPlayer } from './helpers.js';
+import { addResources, assert, currentPlayer, handTotal } from './helpers.js';
 
 export function roll(state: GameState, action: Extract<Action, { type: 'ROLL' }>): ReduceResult {
   assert(state.phase === 'PLAY', 'You can only roll during play.');
@@ -33,9 +33,21 @@ export function roll(state: GameState, action: Extract<Action, { type: 'ROLL' }>
   let next: GameState = { ...state, lastRoll: [d1, d2], turnPhase: 'ACTIONS' };
 
   if (total === 7) {
-    // Placeholder until issue 0009 (discard + robber). No production on a 7.
-    events.push({ type: 'NO_PRODUCTION', total });
-    return { state: next, events };
+    // A 7 produces nothing; instead it triggers forced discards (issue 0009).
+    // Everyone holding >7 cards must discard half (rounded down). If anyone owes
+    // a discard we enter DISCARD and wait for all of them; otherwise the active
+    // player goes straight to moving the robber.
+    const required: Record<string, number> = {};
+    for (const p of state.players) {
+      const held = handTotal(p.hand);
+      if (held > 7) required[p.id] = Math.floor(held / 2);
+    }
+    const owers = Object.keys(required);
+    if (owers.length > 0) {
+      for (const pid of owers) events.push({ type: 'DISCARD_REQUIRED', playerId: pid, count: required[pid] });
+      return { state: { ...next, turnPhase: 'DISCARD', discard: { required } }, events };
+    }
+    return { state: { ...next, turnPhase: 'MOVE_ROBBER' }, events };
   }
 
   const { players, grants } = distributeProduction(state, total);
@@ -98,6 +110,7 @@ export function endTurn(state: GameState, action: Extract<Action, { type: 'END_T
       lastRoll: null,
       devCardPlayedThisTurn: false,
       trade: null,
+      discard: null,
     },
     events: [
       { type: 'TURN_ENDED', playerId: action.actorId },
