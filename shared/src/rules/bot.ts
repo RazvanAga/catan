@@ -17,9 +17,17 @@
  */
 
 import { BOARD } from '../board/index.js';
-import { GameState, Resource, ResourceCounts } from '../types.js';
+import { BUILD_COSTS, GameState, PIECE_LIMITS, Resource, ResourceCounts } from '../types.js';
 import { RESOURCES } from '../types.js';
-import { getPlayer, handTotal, robberVictims, satisfiesDistanceRule } from './helpers.js';
+import {
+  canAfford,
+  edgeConnectsToNetwork,
+  getPlayer,
+  handTotal,
+  hasRoadTouchingVertex,
+  robberVictims,
+  satisfiesDistanceRule,
+} from './helpers.js';
 import { publicVictoryPoints } from './scoring.js';
 
 export type BotMove =
@@ -28,6 +36,10 @@ export type BotMove =
   | { kind: 'roll' }
   | { kind: 'discard'; resources: Partial<ResourceCounts> }
   | { kind: 'moveRobber'; tile: number; stealFrom: string | null }
+  | { kind: 'buildCity'; vertex: number }
+  | { kind: 'buildSettlement'; vertex: number }
+  | { kind: 'buildRoad'; edge: number }
+  | { kind: 'buyDevCard' }
   | { kind: 'endTurn' };
 
 export function decideBotMove(state: GameState, botId: string): BotMove | null {
@@ -52,7 +64,7 @@ export function decideBotMove(state: GameState, botId: string): BotMove | null {
       case 'MOVE_ROBBER':
         return decideRobber(state, botId);
       case 'ACTIONS':
-        return { kind: 'endTurn' }; // building/buying/dev arrive in later slices
+        return decideActions(state, botId);
     }
   }
   return null;
@@ -154,4 +166,102 @@ function decideRobber(state: GameState, botId: string): BotMove {
     }
   }
   return { kind: 'moveRobber', tile: bestTile, stealFrom };
+}
+
+// --- ACTIONS: spend resources, high value first (issue 0018) ------------------
+
+function countOwn(state: GameState, botId: string, kind: 'road' | 'settlement' | 'city'): number {
+  const board = state.board!;
+  if (kind === 'road') return Object.values(board.roads).filter((r) => r.owner === botId).length;
+  return Object.values(board.buildings).filter(
+    (b) => b.owner === botId && b.city === (kind === 'city'),
+  ).length;
+}
+
+/**
+ * The action-phase ladder: take the first affordable, legal, highest-value build
+ * — city, then settlement, then road — then buy a dev card with any surplus, else
+ * end the turn. Each call yields one move; spending one move's resources lets the
+ * driver re-ask, so a whole build-out emerges as a sequence that always reaches
+ * END_TURN (resources strictly decrease, so it terminates).
+ */
+function decideActions(state: GameState, botId: string): BotMove {
+  const hand = getPlayer(state, botId)!.hand;
+
+  if (canAfford(hand, BUILD_COSTS.city) && countOwn(state, botId, 'city') < PIECE_LIMITS.city) {
+    const v = bestCityVertex(state, botId);
+    if (v != null) return { kind: 'buildCity', vertex: v };
+  }
+  if (canAfford(hand, BUILD_COSTS.settlement) && countOwn(state, botId, 'settlement') < PIECE_LIMITS.settlement) {
+    const v = bestSettlementVertex(state, botId);
+    if (v != null) return { kind: 'buildSettlement', vertex: v };
+  }
+  if (canAfford(hand, BUILD_COSTS.road) && countOwn(state, botId, 'road') < PIECE_LIMITS.road) {
+    const e = bestRoadEdge(state, botId);
+    if (e != null) return { kind: 'buildRoad', edge: e };
+  }
+  if (state.devDeck.length > 0 && canAfford(hand, BUILD_COSTS.devCard)) {
+    return { kind: 'buyDevCard' };
+  }
+  return { kind: 'endTurn' };
+}
+
+/** The bot's own settlement (not yet a city) with the highest production pips. */
+function bestCityVertex(state: GameState, botId: string): number | null {
+  const board = state.board!;
+  let best: number | null = null;
+  let bestScore = -1;
+  for (const [vid, b] of Object.entries(board.buildings)) {
+    if (b.owner !== botId || b.city) continue;
+    const v = Number(vid);
+    const score = vertexPips(state, v);
+    if (score > bestScore) {
+      bestScore = score;
+      best = v;
+    }
+  }
+  return best;
+}
+
+/** A legal settlement spot (distance rule + own road) with the highest pips. */
+function bestSettlementVertex(state: GameState, botId: string): number | null {
+  const board = state.board!;
+  let best: number | null = null;
+  let bestScore = -1;
+  for (let v = 0; v < BOARD.vertices.length; v++) {
+    if (!satisfiesDistanceRule(board, v)) continue;
+    if (!hasRoadTouchingVertex(board, v, botId)) continue;
+    const score = vertexPips(state, v);
+    if (score > bestScore) {
+      bestScore = score;
+      best = v;
+    }
+  }
+  return best;
+}
+
+/**
+ * A legal free road connected to the bot's network, preferring one that reaches a
+ * new (empty, distance-legal) high-pip settlement spot; falls back to any legal
+ * road so the network can still grow toward future expansion.
+ */
+function bestRoadEdge(state: GameState, botId: string): number | null {
+  const board = state.board!;
+  let best: number | null = null;
+  let bestScore = -1;
+  let fallback: number | null = null;
+  for (let e = 0; e < BOARD.edges.length; e++) {
+    if (board.roads[e]) continue;
+    if (!edgeConnectsToNetwork(board, e, botId)) continue;
+    if (fallback == null) fallback = e;
+    for (const v of BOARD.edges[e].vertices) {
+      if (!satisfiesDistanceRule(board, v)) continue;
+      const score = vertexPips(state, v);
+      if (score > bestScore) {
+        bestScore = score;
+        best = e;
+      }
+    }
+  }
+  return best ?? fallback;
 }

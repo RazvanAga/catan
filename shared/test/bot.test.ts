@@ -60,6 +60,14 @@ function toAction(s: GameState, id: string, move: BotMove, dice: () => [number, 
       return { type: 'ROLL', actorId: id, dice: dice() };
     case 'discard':
       return { type: 'DISCARD', actorId: id, discard: move.resources };
+    case 'buildCity':
+      return { type: 'BUILD_CITY', actorId: id, vertex: move.vertex };
+    case 'buildSettlement':
+      return { type: 'BUILD_SETTLEMENT', actorId: id, vertex: move.vertex };
+    case 'buildRoad':
+      return { type: 'BUILD_ROAD', actorId: id, edge: move.edge };
+    case 'buyDevCard':
+      return { type: 'BUY_DEV_CARD', actorId: id };
     case 'moveRobber': {
       const victim = move.stealFrom ? s.players.find((p) => p.id === move.stealFrom)! : null;
       return {
@@ -169,6 +177,71 @@ describe('decideBotMove — turn loop', () => {
     const play = driveSetup(started());
     const id = play.players[play.turnIndex].id;
     expect(decideBotMove(play, id)).toEqual(decideBotMove(play, id));
+  });
+});
+
+// --- ACTIONS / building (issue 0018) -----------------------------------------
+
+type Hand = Record<Resource, number>;
+function setHand(state: GameState, id: string, hand: Partial<Hand>): GameState {
+  const full: Hand = { brick: 0, wood: 0, sheep: 0, wheat: 0, ore: 0, ...hand };
+  return { ...state, players: state.players.map((p) => (p.id === id ? { ...p, hand: full } : p)) };
+}
+/** A PLAY/ACTIONS state for the current player (rolls a non-7 first). */
+function inActions(state: GameState): GameState {
+  const id = state.players[state.turnIndex].id;
+  return reduce(state, { type: 'ROLL', actorId: id, dice: [2, 3] }).state;
+}
+/** Dice cycling through every producing total (3–6, 8–12) so resources flow. */
+function diceCycler(): () => [number, number] {
+  const seq: [number, number][] = [[1, 2], [1, 3], [2, 3], [3, 3], [3, 5], [4, 5], [5, 5], [5, 6], [6, 6]];
+  let i = 0;
+  return () => seq[i++ % seq.length];
+}
+function buildingPoints(state: GameState): number {
+  return Object.values(state.board!.buildings).reduce((a, b) => a + (b.city ? 2 : 1), 0);
+}
+
+describe('decideBotMove — ACTIONS building ladder', () => {
+  it('prefers upgrading to a city when affordable', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(s, id, { wheat: 2, ore: 3, brick: 1, wood: 1, sheep: 1 }); // affords all builds
+    const move = decideBotMove(s, id)!;
+    expect(move.kind).toBe('buildCity');
+    expect(() => reduce(s, toAction(s, id, move, () => [2, 3]))).not.toThrow();
+  });
+
+  it('builds a road when only a road is affordable', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(s, id, { brick: 1, wood: 1 });
+    const move = decideBotMove(s, id)!;
+    expect(move.kind).toBe('buildRoad');
+    expect(() => reduce(s, toAction(s, id, move, () => [2, 3]))).not.toThrow();
+  });
+
+  it('buys a development card with a spare sheep/wheat/ore', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = { ...setHand(s, id, { sheep: 1, wheat: 1, ore: 1 }), devDeck: ['knight'] };
+    const move = decideBotMove(s, id)!;
+    expect(move.kind).toBe('buyDevCard');
+    expect(() => reduce(s, toAction(s, id, move, () => [2, 3]))).not.toThrow();
+  });
+
+  it('ends the turn when nothing is affordable', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(s, id, {});
+    expect(decideBotMove(s, id)).toEqual({ kind: 'endTurn' });
+  });
+
+  it('progresses a full bot game to more victory points than setup', () => {
+    const play = driveSetup(started());
+    const after = autoPlay(play, diceCycler(), 80);
+    // Setup leaves 6 settlements (6 pts); real building must have happened.
+    expect(buildingPoints(after)).toBeGreaterThan(6);
   });
 });
 

@@ -323,6 +323,14 @@ export class Room {
         return { type: 'ROLL', actorId: botId, dice: this.rollDice() };
       case 'discard':
         return { type: 'DISCARD', actorId: botId, discard: move.resources };
+      case 'buildCity':
+        return { type: 'BUILD_CITY', actorId: botId, vertex: move.vertex };
+      case 'buildSettlement':
+        return { type: 'BUILD_SETTLEMENT', actorId: botId, vertex: move.vertex };
+      case 'buildRoad':
+        return { type: 'BUILD_ROAD', actorId: botId, edge: move.edge };
+      case 'buyDevCard':
+        return { type: 'BUY_DEV_CARD', actorId: botId };
       case 'moveRobber':
         return {
           type: 'MOVE_ROBBER',
