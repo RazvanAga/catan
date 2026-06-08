@@ -231,32 +231,31 @@ async function startBotGame(bots: number, rollDice: () => [number, number]): Pro
 async function playTurns(game: BotGame, turns: number, opts: { sevens: boolean }): Promise<void> {
   const { host, humanSeat } = game;
   const target = host.view!.turn!.turnNumber + turns;
+  const done = (s: GameView) => s.phase !== 'PLAY' || (s.turn?.turnNumber ?? 0) >= target;
   let guard = 0;
-  while (host.view!.turn!.turnNumber < target && host.view!.phase === 'PLAY' && guard++ < 400) {
+  while (host.view!.phase === 'PLAY' && (host.view!.turn?.turnNumber ?? 0) < target && guard++ < 5000) {
     const v = host.view!;
     if (v.turn!.currentPlayerId !== humanSeat) {
-      await host.waitFor(
-        (s) => s.phase !== 'PLAY' || s.turn!.currentPlayerId === humanSeat || s.turn!.turnNumber >= target,
-      );
+      await host.waitFor((s) => done(s) || s.turn?.currentPlayerId === humanSeat);
       continue;
     }
     switch (v.turn!.phase) {
       case 'MUST_ROLL':
         host.emit('roll');
-        await host.waitFor((s) => s.turn!.phase !== 'MUST_ROLL' || s.turn!.currentPlayerId !== humanSeat);
+        await host.waitFor((s) => done(s) || s.turn!.phase !== 'MUST_ROLL' || s.turn!.currentPlayerId !== humanSeat);
         break;
       case 'MOVE_ROBBER': {
         const { tile, stealFrom } = legalRobberTile(v, humanSeat);
         host.emit('moveRobber', { tile, stealFrom });
-        await host.waitFor((s) => s.turn!.phase !== 'MOVE_ROBBER');
+        await host.waitFor((s) => done(s) || s.turn!.phase !== 'MOVE_ROBBER');
         break;
       }
       case 'ACTIONS':
         host.emit('endTurn');
-        await host.waitFor((s) => s.turn!.currentPlayerId !== humanSeat || s.turn!.turnNumber >= target);
+        await host.waitFor((s) => done(s) || s.turn!.currentPlayerId !== humanSeat);
         break;
       default:
-        await host.waitFor((s) => s.turn!.phase !== v.turn!.phase);
+        await host.waitFor((s) => done(s) || s.turn!.phase !== v.turn!.phase);
     }
     void opts;
   }
@@ -328,4 +327,15 @@ describe('bots play through the server driver', () => {
     // Both bots answered automatically (the human proposal never hung).
     expect(host.view!.trade!.responses.length).toBe(2);
   });
+
+  it('drives a bot-majority game to a bot victory via bank trading', async () => {
+    // Production across many tokens (never a 7) so bots accumulate, bank-trade
+    // surpluses for what they lack, and build all the way to a 10-VP win.
+    const seq: [number, number][] = [[1, 2], [1, 3], [2, 3], [3, 3], [3, 5], [4, 5], [5, 5], [5, 6], [6, 6]];
+    let i = 0;
+    const game = await startBotGame(2, () => seq[i++ % seq.length]);
+    await playTurns(game, 2000, { sevens: false }); // breaks as soon as a bot wins
+    expect(game.host.view!.phase).toBe('ENDED');
+    expect(game.host.view!.winner).not.toBeNull();
+  }, 30000);
 });

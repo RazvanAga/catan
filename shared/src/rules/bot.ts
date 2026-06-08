@@ -29,6 +29,7 @@ import {
   satisfiesDistanceRule,
 } from './helpers.js';
 import { publicVictoryPoints } from './scoring.js';
+import { bestBankRatio } from './trade.js';
 
 /** A dev-card play the bot wants, RNG-free (a knight's stolen card is server-rolled). */
 export type BotDevPlay =
@@ -49,6 +50,7 @@ export type BotMove =
   | { kind: 'buildSettlement'; vertex: number }
   | { kind: 'buildRoad'; edge: number }
   | { kind: 'buyDevCard' }
+  | { kind: 'tradeBank'; give: Resource; receive: Resource }
   | { kind: 'endTurn' };
 
 export function decideBotMove(state: GameState, botId: string): BotMove | null {
@@ -235,7 +237,83 @@ function decideActions(state: GameState, botId: string): BotMove {
   if (state.devDeck.length > 0 && canAfford(hand, BUILD_COSTS.devCard)) {
     return { kind: 'buyDevCard' };
   }
+  const trade = decideBankTrade(state, botId);
+  if (trade) return trade;
   return { kind: 'endTurn' };
+}
+
+// --- Bank/port trading to unblock a build (issue 0021) -----------------------
+
+/**
+ * When nothing is affordable, convert a surplus resource at the best bank/port
+ * ratio toward the highest-priority build the bot has a legal target for — but
+ * only when that build is actually *reachable* by trading (the surplus can cover
+ * the whole deficit). One trade per call; each strictly shrinks the hand, so the
+ * sequence terminates at the build (or END_TURN), never an endless trade loop.
+ */
+function decideBankTrade(state: GameState, botId: string): BotMove | null {
+  const targets: { cost: Partial<ResourceCounts>; ok: boolean }[] = [
+    {
+      cost: BUILD_COSTS.city,
+      ok: countOwn(state, botId, 'city') < PIECE_LIMITS.city && bestCityVertex(state, botId) != null,
+    },
+    {
+      cost: BUILD_COSTS.settlement,
+      ok:
+        countOwn(state, botId, 'settlement') < PIECE_LIMITS.settlement &&
+        bestSettlementVertex(state, botId) != null,
+    },
+    {
+      cost: BUILD_COSTS.road,
+      ok: countOwn(state, botId, 'road') < PIECE_LIMITS.road && bestRoadEdge(state, botId) != null,
+    },
+  ];
+  for (const t of targets) {
+    if (!t.ok) continue;
+    const move = tradeTowardBuild(state, botId, t.cost);
+    if (move) return move;
+  }
+  return null;
+}
+
+/** One bank trade toward `cost`, if the bot's surplus can fully cover its deficit. */
+function tradeTowardBuild(state: GameState, botId: string, cost: Partial<ResourceCounts>): BotMove | null {
+  const hand = getPlayer(state, botId)!.hand;
+  const need: Partial<ResourceCounts> = {};
+  let totalDeficit = 0;
+  for (const r of RESOURCES) {
+    const gap = (cost[r] ?? 0) - hand[r];
+    if (gap > 0) {
+      need[r] = gap;
+      totalDeficit += gap;
+    }
+  }
+  if (totalDeficit === 0) return null; // already affordable (handled earlier)
+
+  // Resources held beyond what the build reserves can be traded away.
+  let tradableOutput = 0;
+  let give: Resource | null = null;
+  let giveRatio = Infinity;
+  for (const r of RESOURCES) {
+    const surplus = hand[r] - (cost[r] ?? 0);
+    if (surplus <= 0) continue;
+    const ratio = bestBankRatio(state, botId, r);
+    if (surplus < ratio) continue;
+    tradableOutput += Math.floor(surplus / ratio);
+    // Prefer the cheapest ratio, then the deepest surplus, as the resource to give.
+    if (ratio < giveRatio || (ratio === giveRatio && give != null && surplus > hand[give] - (cost[give] ?? 0))) {
+      give = r;
+      giveRatio = ratio;
+    }
+  }
+  if (give == null || tradableOutput < totalDeficit) return null; // build not reachable
+
+  // Receive the resource we're shortest on.
+  let receive: Resource | null = null;
+  for (const r of RESOURCES) {
+    if ((need[r] ?? 0) > (receive ? need[receive] ?? 0 : 0)) receive = r;
+  }
+  return receive ? { kind: 'tradeBank', give, receive } : null;
 }
 
 /** The bot's own settlement (not yet a city) with the highest production pips. */

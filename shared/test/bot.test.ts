@@ -71,6 +71,8 @@ function toAction(s: GameState, id: string, move: BotMove, dice: () => [number, 
       return { type: 'BUY_DEV_CARD', actorId: id };
     case 'respondTrade':
       return { type: 'RESPOND_TRADE', actorId: id, response: move.response };
+    case 'tradeBank':
+      return { type: 'TRADE_BANK', actorId: id, give: move.give, receive: move.receive };
     case 'playDevCard': {
       const p = move.play;
       if (p.card === 'knight') {
@@ -398,6 +400,37 @@ describe('decideBotMove — trade responses', () => {
     // p1 is the current player with an open trade it proposed: it ends its turn,
     // it does not respond to itself.
     expect(decideBotMove(s, p1.id)).toEqual({ kind: 'endTurn' });
+  });
+});
+
+// --- Bank/port trading (issue 0021) ------------------------------------------
+
+describe('decideBotMove — bank trading', () => {
+  it('trades surplus to unblock a build it is short on', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    // Has wheat for a city but no ore; a deep wood surplus covers the ore at 4:1.
+    s = setHand(s, id, { wheat: 2, wood: 12 });
+    const move = decideBotMove(s, id)!;
+    expect(move.kind).toBe('tradeBank');
+    const m = move as { give: Resource; receive: Resource };
+    expect(m.give).toBe('wood');
+    expect(m.receive).toBe('ore');
+    expect(() => reduce(s, toAction(s, id, move, () => [2, 3]))).not.toThrow();
+  });
+
+  it('does not trade when no build is reachable, just ends the turn', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(s, id, { wood: 3 }); // too little surplus to reach anything
+    expect(decideBotMove(s, id)).toEqual({ kind: 'endTurn' });
+  });
+
+  it('drives an all-bot game to a 10-VP victory once trading is available', () => {
+    const play = driveSetup(started());
+    const after = autoPlay(play, diceCycler(), 600);
+    expect(after.phase).toBe('ENDED');
+    expect(after.winner).not.toBeNull();
   });
 });
 

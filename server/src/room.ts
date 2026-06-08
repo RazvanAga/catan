@@ -341,6 +341,8 @@ export class Room {
         return { type: 'BUY_DEV_CARD', actorId: botId };
       case 'respondTrade':
         return { type: 'RESPOND_TRADE', actorId: botId, response: move.response };
+      case 'tradeBank':
+        return { type: 'TRADE_BANK', actorId: botId, give: move.give, receive: move.receive };
       case 'playDevCard': {
         const p = move.play;
         if (p.card === 'knight') {
