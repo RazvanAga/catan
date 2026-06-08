@@ -60,7 +60,7 @@ export function createGameServer(opts: GameServerOptions = {}) {
     cors: { origin: opts.clientOrigin ?? 'http://localhost:5173', methods: ['GET', 'POST'] },
   });
 
-  const room = new Room({ vacancyMs: opts.vacancyMs });
+  const room = new Room({ vacancyMs: opts.vacancyMs, rollDice });
 
   io.on('connection', (socket) => {
     // The token is the secret; the seat is always derived from it through the

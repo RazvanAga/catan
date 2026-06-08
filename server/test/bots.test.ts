@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import { io as connect, type Socket } from 'socket.io-client';
-import type { GameView } from '@catan/shared';
+import { BOARD, type BoardState, type GameView } from '@catan/shared';
 import { createGameServer } from '../src/app.js';
 
 const COLORS = ['red', 'blue', 'orange'] as const;
@@ -92,6 +92,38 @@ async function lobby(n: number): Promise<Harness> {
   return harness;
 }
 
+// --- Helpers for driving a human seat through a bot-populated game -------------
+
+function firstLegalVertex(board: BoardState): number {
+  for (let v = 0; v < BOARD.vertices.length; v++) {
+    if (board.buildings[v]) continue;
+    if (BOARD.vertices[v].vertices.every((n) => !board.buildings[n])) return v;
+  }
+  throw new Error('no legal setup vertex');
+}
+
+function firstFreeEdge(board: BoardState, vertex: number): number {
+  const e = BOARD.vertices[vertex].edges.find((eid) => !board.roads[eid]);
+  if (e == null) throw new Error('no free setup edge');
+  return e;
+}
+
+/** A legal robber destination for a human seat, with a victim if the tile has one. */
+function legalRobberTile(view: GameView, mySeat: string): { tile: number; stealFrom: string | null } {
+  const board = view.board!;
+  for (let t = 0; t < BOARD.tiles.length; t++) {
+    if (t === board.robberTile) continue;
+    const owners = new Set<string>();
+    for (const v of BOARD.tiles[t].vertices) {
+      const b = board.buildings[v];
+      if (b && b.owner !== mySeat) owners.add(b.owner);
+    }
+    const victim = view.players.find((p) => owners.has(p.id) && p.handCount > 0);
+    return { tile: t, stealFrom: victim?.id ?? null };
+  }
+  return { tile: board.robberTile === 0 ? 1 : 0, stealFrom: null };
+}
+
 describe('lobby bots over the socket seam', () => {
   it('lets the owner add a bot with an auto color and "Bot N" name', async () => {
     const { clients } = await lobby(2); // red, blue taken
@@ -138,5 +170,119 @@ describe('lobby bots over the socket seam', () => {
     expect(new Set(colors).size).toBe(4); // all four base colors, no clash
     const botNames = host.view!.players.filter((p) => p.isBot).map((p) => p.name).sort();
     expect(botNames).toEqual(['Bot 1', 'Bot 2']);
+  });
+});
+
+interface BotGame {
+  host: TestClient;
+  humanSeat: string;
+}
+
+/**
+ * Boot a server (with deterministic dice), seat one human owner, add `bots` bots,
+ * start, and drive the snake draft — the human places on its own turns while the
+ * server auto-drives the bot seats. Returns once play has reached PLAY.
+ */
+async function startBotGame(bots: number, rollDice: () => [number, number]): Promise<BotGame> {
+  const { httpServer, io } = createGameServer({ rollDice });
+  await new Promise<void>((r) => httpServer.listen(0, r));
+  const port = (httpServer.address() as AddressInfo).port;
+
+  const host = new TestClient(port);
+  host.emit('auth', {});
+  await host.waitFor(() => true);
+  host.emit('join', { name: 'human', color: 'red' });
+  await host.waitFor((v) => v.youId != null);
+  const humanSeat = host.view!.youId!;
+
+  for (let i = 0; i < bots; i++) {
+    host.emit('addBot');
+    await host.waitFor((v) => v.players.length === 2 + i);
+  }
+
+  host.emit('startGame');
+  await host.waitFor((v) => v.phase === 'SETUP');
+
+  let guard = 0;
+  while (host.view!.phase === 'SETUP' && guard++ < 100) {
+    const v = host.view!;
+    if (v.setup!.currentPlayerId !== humanSeat) {
+      // A bot's placement — the server drives it; wait for the turn to move on.
+      await host.waitFor((s) => s.phase !== 'SETUP' || s.setup!.currentPlayerId !== v.setup!.currentPlayerId);
+      continue;
+    }
+    if (v.setup!.pending === 'settlement') {
+      const vtx = firstLegalVertex(v.board!);
+      host.emit('placeSetupSettlement', { vertex: vtx });
+      await host.waitFor((s) => !!s.board?.buildings[vtx]);
+    } else {
+      const edge = firstFreeEdge(v.board!, v.setup!.lastSettlement!);
+      host.emit('placeSetupRoad', { edge });
+      await host.waitFor((s) => !!s.board?.roads[edge]);
+    }
+  }
+  await host.waitFor((v) => v.phase === 'PLAY');
+
+  harnesses.push({ clients: [host], seats: [humanSeat], close: () => { host.close(); io.close(); httpServer.close(); } });
+  return { host, humanSeat };
+}
+
+/** Play `turns` full PLAY turns, handling the human's obligations; bots auto-play. */
+async function playTurns(game: BotGame, turns: number, opts: { sevens: boolean }): Promise<void> {
+  const { host, humanSeat } = game;
+  const target = host.view!.turn!.turnNumber + turns;
+  let guard = 0;
+  while (host.view!.turn!.turnNumber < target && host.view!.phase === 'PLAY' && guard++ < 400) {
+    const v = host.view!;
+    if (v.turn!.currentPlayerId !== humanSeat) {
+      await host.waitFor(
+        (s) => s.phase !== 'PLAY' || s.turn!.currentPlayerId === humanSeat || s.turn!.turnNumber >= target,
+      );
+      continue;
+    }
+    switch (v.turn!.phase) {
+      case 'MUST_ROLL':
+        host.emit('roll');
+        await host.waitFor((s) => s.turn!.phase !== 'MUST_ROLL' || s.turn!.currentPlayerId !== humanSeat);
+        break;
+      case 'MOVE_ROBBER': {
+        const { tile, stealFrom } = legalRobberTile(v, humanSeat);
+        host.emit('moveRobber', { tile, stealFrom });
+        await host.waitFor((s) => s.turn!.phase !== 'MOVE_ROBBER');
+        break;
+      }
+      case 'ACTIONS':
+        host.emit('endTurn');
+        await host.waitFor((s) => s.turn!.currentPlayerId !== humanSeat || s.turn!.turnNumber >= target);
+        break;
+      default:
+        await host.waitFor((s) => s.turn!.phase !== v.turn!.phase);
+    }
+    void opts;
+  }
+}
+
+describe('bots play through the server driver', () => {
+  it('auto-places bot settlements during setup', async () => {
+    const { host } = await startBotGame(2, () => [2, 3]);
+    // Each of the two bots placed two settlements without the test acting for them.
+    for (const p of host.view!.players.filter((pp) => pp.isBot)) {
+      const owned = Object.values(host.view!.board!.buildings).filter((b) => b.owner === p.id).length;
+      expect(owned).toBe(2);
+    }
+  });
+
+  it('auto-takes bot turns so play cycles without stalling (non-7)', async () => {
+    const game = await startBotGame(2, () => [2, 3]);
+    const before = game.host.view!.turn!.turnNumber;
+    await playTurns(game, 9, { sevens: false });
+    expect(game.host.view!.turn!.turnNumber).toBeGreaterThanOrEqual(before + 9);
+  });
+
+  it('auto-moves the robber on bot turns when every roll is a 7', async () => {
+    const game = await startBotGame(2, () => [3, 4]); // 7 every roll
+    const before = game.host.view!.turn!.turnNumber;
+    await playTurns(game, 6, { sevens: true });
+    expect(game.host.view!.turn!.turnNumber).toBeGreaterThanOrEqual(before + 6);
   });
 });

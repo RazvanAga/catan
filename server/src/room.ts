@@ -9,6 +9,7 @@
 
 import {
   Action,
+  BotMove,
   GameEvent,
   GameState,
   IllegalActionError,
@@ -17,6 +18,7 @@ import {
   Resource,
   ResourceCounts,
   ServerToClientEvents,
+  decideBotMove,
   initialState,
   pickRandomCard,
   projectStateForPlayer,
@@ -47,9 +49,13 @@ export class Room {
   /** Pending "disconnected -> vacant" timers, keyed by seat id. */
   private readonly vacancyTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly vacancyMs: number;
+  /** Dice source for bot rolls — the same RNG the human `roll` handler uses. */
+  private readonly rollDice: () => [number, number];
 
-  constructor(opts: { vacancyMs?: number } = {}) {
+  constructor(opts: { vacancyMs?: number; rollDice?: () => [number, number] } = {}) {
     this.vacancyMs = opts.vacancyMs ?? DEFAULT_VACANCY_MS;
+    this.rollDice =
+      opts.rollDice ?? (() => [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]);
   }
 
   get phase() {
@@ -101,7 +107,7 @@ export class Room {
    */
   apply(action: Action): void {
     this.dispatch(action);
-    this.settleVacantSeats();
+    this.drive();
   }
 
   // --- Bots in the lobby (issue 0016) -----------------------------------------
@@ -218,7 +224,7 @@ export class Room {
       const seat = this.state.players.find((p) => p.id === playerId);
       if (seat && !seat.connected && !seat.vacant) {
         this.dispatch({ type: 'VACATE_SEAT', playerId });
-        this.settleVacantSeats();
+        this.drive();
       }
     }, this.vacancyMs);
     // Don't keep the process alive just for a vacancy timer.
@@ -235,33 +241,98 @@ export class Room {
   }
 
   /**
-   * Keep play moving past vacant seats: auto-discard for any vacant seat that
-   * owes a discard after a 7, and auto-skip a vacant seat whose turn it is. Only
-   * vacant seats are auto-resolved — a merely disconnected seat still blocks
-   * (the table waits for it). Stops if every seat is vacant (no one left).
+   * Keep play moving after a state change: auto-resolve vacant seats (skip their
+   * turns, auto-discard) and drive any bot seat that owes input (issue 0017),
+   * interleaved, until no automated seat owes anything. A bot ending its turn may
+   * hand the table to a vacant seat or another bot, so the two are driven in one
+   * loop. Bounded by a guard so a logic bug degrades to stopping, never a hang.
    */
-  private settleVacantSeats(): void {
-    if (this.state.phase !== 'PLAY') return;
-    const guard = this.state.players.length * 4 + 10;
+  private drive(): void {
+    const guard = this.state.players.length * 200 + 100;
     for (let i = 0; i < guard; i++) {
-      const s = this.state;
-      if (s.discard) {
-        const owedByVacant = Object.keys(s.discard.required).find(
-          (pid) => s.players.find((p) => p.id === pid)?.vacant,
-        );
-        if (owedByVacant) {
-          this.autoDiscard(owedByVacant);
-          continue;
-        }
-        break; // still waiting on a present (if disconnected) player's discard
-      }
-      const current = s.players[s.turnIndex];
-      if (current?.vacant) {
-        if (s.players.every((p) => p.vacant)) break; // nobody left to take a turn
-        this.dispatch({ type: 'SKIP_TURN', actorId: current.id });
-        continue;
-      }
+      if (this.stepVacant()) continue;
+      if (this.stepBot()) continue;
       break;
+    }
+  }
+
+  /**
+   * One vacant-seat resolution, if any is owed: auto-discard for a vacant seat
+   * that owes a discard, else auto-skip a vacant seat whose turn it is. Only
+   * vacant seats are auto-resolved — a merely disconnected human still blocks
+   * (the table waits for it). Returns whether it acted.
+   */
+  private stepVacant(): boolean {
+    const s = this.state;
+    if (s.phase !== 'PLAY') return false;
+    if (s.discard) {
+      const owedByVacant = Object.keys(s.discard.required).find(
+        (pid) => s.players.find((p) => p.id === pid)?.vacant,
+      );
+      if (owedByVacant) {
+        this.autoDiscard(owedByVacant);
+        return true;
+      }
+      return false; // waiting on a present (if disconnected) player's discard
+    }
+    const current = s.players[s.turnIndex];
+    if (current?.vacant && !s.players.every((p) => p.vacant)) {
+      this.dispatch({ type: 'SKIP_TURN', actorId: current.id });
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * One bot move, if a bot owes input: ask the pure policy what the owing bot
+   * wants, translate it into a full action (filling RNG the same way the human
+   * socket handlers do), and dispatch it. Returns whether it acted.
+   */
+  private stepBot(): boolean {
+    const botId = this.botOwingInput();
+    if (!botId) return false;
+    const move = decideBotMove(this.state, botId);
+    if (!move) return false;
+    this.dispatch(this.botMoveToAction(botId, move));
+    return true;
+  }
+
+  /** The bot whose input the game is currently waiting on, or null. */
+  private botOwingInput(): string | null {
+    const s = this.state;
+    if (s.phase !== 'SETUP' && s.phase !== 'PLAY') return null;
+    // A forced discard can be owed by a non-active bot; resolve those first.
+    if (s.phase === 'PLAY' && s.turnPhase === 'DISCARD' && s.discard) {
+      const ower = Object.keys(s.discard.required).find(
+        (pid) => s.players.find((p) => p.id === pid)?.isBot,
+      );
+      return ower ?? null;
+    }
+    const current = s.players[s.turnIndex];
+    return current?.isBot ? current.id : null;
+  }
+
+  /** Translate a bot's RNG-free move into a full action, supplying server RNG. */
+  private botMoveToAction(botId: string, move: BotMove): Action {
+    switch (move.kind) {
+      case 'placeSetupSettlement':
+        return { type: 'PLACE_SETUP_SETTLEMENT', actorId: botId, vertex: move.vertex };
+      case 'placeSetupRoad':
+        return { type: 'PLACE_SETUP_ROAD', actorId: botId, edge: move.edge };
+      case 'roll':
+        return { type: 'ROLL', actorId: botId, dice: this.rollDice() };
+      case 'discard':
+        return { type: 'DISCARD', actorId: botId, discard: move.resources };
+      case 'moveRobber':
+        return {
+          type: 'MOVE_ROBBER',
+          actorId: botId,
+          tile: move.tile,
+          stealFrom: move.stealFrom,
+          stolen: move.stealFrom ? this.pickStolenCard(move.stealFrom) : null,
+        };
+      case 'endTurn':
+        return { type: 'END_TURN', actorId: botId };
     }
   }
 
