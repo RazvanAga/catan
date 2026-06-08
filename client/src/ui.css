@@ -138,6 +138,36 @@ button.primary:disabled {
   cursor: not-allowed;
 }
 
+button.secondary {
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #3a4658;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+button.secondary:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+}
+
+.link-button:hover {
+  color: var(--text);
+}
+
 .roster {
   list-style: none;
   margin: 0;

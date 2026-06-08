@@ -59,6 +59,9 @@ export interface BlockedMsg {
 export interface ClientToServerEvents {
   auth: (msg: AuthMsg) => void;
   join: (msg: JoinMsg) => void;
+  // --- Bots in the lobby (issue 0016); owner-only ---
+  addBot: () => void;
+  removeBot: (msg: { playerId: string }) => void;
   startGame: () => void;
   // --- SETUP (issue 0004) ---
   placeSetupSettlement: (msg: { vertex: number }) => void;

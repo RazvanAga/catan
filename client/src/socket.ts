@@ -75,6 +75,14 @@ export const commands = {
     useStore.getState().setError(null);
     socket.emit('join', { name, color });
   },
+  addBot() {
+    useStore.getState().setError(null);
+    socket.emit('addBot');
+  },
+  removeBot(playerId: string) {
+    useStore.getState().setError(null);
+    socket.emit('removeBot', { playerId });
+  },
   startGame() {
     useStore.getState().setError(null);
     socket.emit('startGame');

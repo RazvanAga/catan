@@ -40,6 +40,8 @@ export interface PlayerView {
   connected: boolean;
   /** True once a disconnected seat has timed out and is open for anyone to claim. */
   vacant: boolean;
+  /** A computer-controlled seat (issue 0016). */
+  isBot: boolean;
   isOwner: boolean;
   /** Total resource cards held (counts only — never which ones). */
   handCount: number;
@@ -127,6 +129,7 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
     color: p.color,
     connected: p.connected,
     vacant: p.vacant,
+    isBot: p.isBot,
     isOwner: p.id === owner,
     handCount: sumHand(p.hand),
     devCardCount: p.devCards.length,

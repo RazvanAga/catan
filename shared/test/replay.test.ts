@@ -16,6 +16,7 @@ function seat(id: string, i: number): Player {
     id,
     name: `name-${id}`,
     color: COLORS[i],
+    isBot: false,
     connected: true,
     vacant: false,
     hand: { brick: 2, wood: 1, sheep: 0, wheat: 3, ore: 1 },

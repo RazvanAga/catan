@@ -118,6 +118,20 @@ export function createGameServer(opts: GameServerOptions = {}) {
       room.sendSnapshotTo(socket.id);
     });
 
+    // Bots (issue 0016): owner-only seat management while in the lobby. The room
+    // picks an available color and a "Bot N" name; the reducer re-validates the
+    // owner/LOBBY/room-full/color gates and rejects a non-owner caller.
+    socket.on('addBot', () => {
+      const pid = seat();
+      if (!pid) return;
+      try {
+        room.addBot(pid);
+      } catch (err) {
+        reportError(err);
+      }
+    });
+    socket.on('removeBot', ({ playerId }) => act((pid) => ({ type: 'REMOVE_BOT', actorId: pid, playerId })));
+
     // The server owns all RNG: dice, board arrangement, and the shuffled dev deck
     // are generated here and passed into the (deterministic) reducer as data.
     socket.on('startGame', () =>

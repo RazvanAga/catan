@@ -36,6 +36,7 @@ export function join(state: GameState, action: Extract<Action, { type: 'JOIN' }>
     id: action.playerId,
     name,
     color: action.color,
+    isBot: false,
     connected: true,
     vacant: false,
     hand: emptyHand(),
@@ -45,6 +46,56 @@ export function join(state: GameState, action: Extract<Action, { type: 'JOIN' }>
   return {
     state: { ...state, players: [...state.players, player] },
     events: [{ type: 'PLAYER_JOINED', playerId: player.id, name: player.name, color: player.color }],
+  };
+}
+
+/**
+ * The owner adds a bot to fill an empty seat (issue 0016). Validated like JOIN
+ * (room not full, color free, name present) plus an owner/LOBBY gate. The seat is
+ * a normal Player flagged `isBot`; the server picks an available color and a
+ * "Bot N" name and passes them in as action data, mirroring how JOIN receives a
+ * human's chosen name/color.
+ */
+export function addBot(state: GameState, action: Extract<Action, { type: 'ADD_BOT' }>): ReduceResult {
+  assert(state.phase === 'LOBBY', 'Cannot add a bot: a game is already in progress.');
+  assert(action.actorId === ownerId(state), 'Cannot add a bot: only the room owner may.');
+  assert(state.players.length < MAX_PLAYERS, `Cannot add a bot: room is full (${MAX_PLAYERS} players).`);
+  assert(!state.players.some((p) => p.id === action.playerId), 'Cannot add a bot: id already seated.');
+  const name = action.name.trim();
+  assert(name.length > 0, 'Cannot add a bot: a name is required.');
+  assert(PLAYER_COLORS.includes(action.color), `Cannot add a bot: unknown color "${action.color}".`);
+  assert(
+    !state.players.some((p) => p.color === action.color),
+    `Cannot add a bot: color "${action.color}" is already taken.`,
+  );
+
+  const bot: Player = {
+    id: action.playerId,
+    name,
+    color: action.color,
+    isBot: true,
+    connected: true,
+    vacant: false,
+    hand: emptyHand(),
+    devCards: [],
+    knightsPlayed: 0,
+  };
+  return {
+    state: { ...state, players: [...state.players, bot] },
+    events: [{ type: 'BOT_ADDED', playerId: bot.id, name: bot.name, color: bot.color }],
+  };
+}
+
+/** The owner removes a bot it added (issue 0016). Only bot seats are removable. */
+export function removeBot(state: GameState, action: Extract<Action, { type: 'REMOVE_BOT' }>): ReduceResult {
+  assert(state.phase === 'LOBBY', 'Cannot remove a bot: a game is already in progress.');
+  assert(action.actorId === ownerId(state), 'Cannot remove a bot: only the room owner may.');
+  const target = state.players.find((p) => p.id === action.playerId);
+  assert(target != null, 'Cannot remove a bot: no such seat.');
+  assert(target!.isBot, 'Cannot remove a bot: that seat is not a bot.');
+  return {
+    state: { ...state, players: state.players.filter((p) => p.id !== action.playerId) },
+    events: [{ type: 'BOT_REMOVED', playerId: target!.id, name: target!.name }],
   };
 }
 

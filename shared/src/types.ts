@@ -54,6 +54,9 @@ export interface Player {
   id: string;
   name: string;
   color: PlayerColor;
+  /** A computer-controlled seat (issue 0016). Bots have no socket/token; they are
+   * driven server-side, but otherwise obey every rule a human seat does. */
+  isBot: boolean;
   /** Socket-level seat lifecycle (issue 0014). A connected seat is live; a
    * disconnected one is greyed but still owned by its token; a vacant one (after
    * a timeout) is claimable by anyone and auto-skips its turn. `connected` is the
@@ -186,6 +189,9 @@ export function emptyBonuses(): Bonuses {
  */
 export type Action =
   | { type: 'JOIN'; playerId: string; name: string; color: PlayerColor }
+  // --- Bots in the lobby (issue 0016); owner-only, LOBBY-only ---
+  | { type: 'ADD_BOT'; actorId: string; playerId: string; name: string; color: PlayerColor }
+  | { type: 'REMOVE_BOT'; actorId: string; playerId: string }
   | { type: 'START_GAME'; actorId: string; board: BoardSetup; devDeck: DevCard[] }
   // --- SETUP (issue 0004) ---
   | { type: 'PLACE_SETUP_SETTLEMENT'; actorId: string; vertex: number }
@@ -222,6 +228,9 @@ export type Action =
 /** Append-only narration entries emitted by `reduce`, for toasts/animations. */
 export type GameEvent =
   | { type: 'PLAYER_JOINED'; playerId: string; name: string; color: PlayerColor }
+  // --- Bots in the lobby (issue 0016) ---
+  | { type: 'BOT_ADDED'; playerId: string; name: string; color: PlayerColor }
+  | { type: 'BOT_REMOVED'; playerId: string; name: string }
   | { type: 'GAME_STARTED'; playerCount: number }
   | { type: 'SETTLEMENT_BUILT'; playerId: string; vertex: number; setup: boolean }
   | { type: 'ROAD_BUILT'; playerId: string; edge: number; setup: boolean }

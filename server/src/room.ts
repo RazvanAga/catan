@@ -11,6 +11,9 @@ import {
   Action,
   GameEvent,
   GameState,
+  IllegalActionError,
+  PLAYER_COLORS,
+  PlayerColor,
   Resource,
   ResourceCounts,
   ServerToClientEvents,
@@ -19,6 +22,7 @@ import {
   projectStateForPlayer,
   reduce,
 } from '@catan/shared';
+import { randomUUID } from 'node:crypto';
 import type { Socket } from 'socket.io';
 
 type ClientSocket = Socket<Record<string, never>, ServerToClientEvents>;
@@ -98,6 +102,38 @@ export class Room {
   apply(action: Action): void {
     this.dispatch(action);
     this.settleVacantSeats();
+  }
+
+  // --- Bots in the lobby (issue 0016) -----------------------------------------
+
+  /**
+   * The owner adds a bot: the server picks an available color and a "Bot N" name
+   * (the bit of "RNG"/state-derived choice that stays out of the pure reducer) and
+   * applies ADD_BOT, which re-validates the owner/LOBBY/room-full/color gates.
+   */
+  addBot(actorId: string): void {
+    const color = this.firstAvailableColor();
+    if (!color) throw new IllegalActionError('Cannot add a bot: room is full.');
+    this.apply({ type: 'ADD_BOT', actorId, playerId: randomUUID(), name: this.nextBotName(), color });
+  }
+
+  removeBot(actorId: string, playerId: string): void {
+    this.apply({ type: 'REMOVE_BOT', actorId, playerId });
+  }
+
+  /** First base-game color no seat is using, or undefined when all four are taken. */
+  private firstAvailableColor(): PlayerColor | undefined {
+    const taken = new Set(this.state.players.map((p) => p.color));
+    return PLAYER_COLORS.find((c) => !taken.has(c));
+  }
+
+  /** The lowest "Bot N" name not already in use, so removed bots free their name. */
+  private nextBotName(): string {
+    const taken = new Set(this.state.players.map((p) => p.name));
+    for (let n = 1; ; n++) {
+      const name = `Bot ${n}`;
+      if (!taken.has(name)) return name;
+    }
   }
 
   /** Reduce + broadcast a single action, without the vacant-seat settling pass. */

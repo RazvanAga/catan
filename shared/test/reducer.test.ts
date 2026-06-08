@@ -56,6 +56,75 @@ describe('JOIN', () => {
   });
 });
 
+const addBot = (actorId: string, id: string, color: Action extends never ? never : any): Action => ({
+  type: 'ADD_BOT',
+  actorId,
+  playerId: id,
+  name: 'Bot 1',
+  color,
+});
+
+describe('ADD_BOT / REMOVE_BOT', () => {
+  it('seats a bot with isBot set and emits BOT_ADDED', () => {
+    const lobby = run(initialState(), [ALICE, BOB, CARA]);
+    const { state, events } = reduce(lobby, addBot('p1', 'b1', 'white'));
+    expect(state.players).toHaveLength(4);
+    expect(state.players[3]).toMatchObject({ id: 'b1', color: 'white', isBot: true, connected: true });
+    expect(events).toContainEqual({ type: 'BOT_ADDED', playerId: 'b1', name: 'Bot 1', color: 'white' });
+  });
+
+  it('marks human joiners as not bots', () => {
+    const { state } = reduce(initialState(), ALICE);
+    expect(state.players[0].isBot).toBe(false);
+  });
+
+  it('rejects a non-owner adding a bot', () => {
+    const lobby = run(initialState(), [ALICE, BOB, CARA]);
+    expect(() => reduce(lobby, addBot('p2', 'b1', 'white'))).toThrow(/owner/);
+  });
+
+  it('rejects a bot when the room is full', () => {
+    const full = run(initialState(), [ALICE, BOB, CARA, DAN]);
+    expect(() => reduce(full, addBot('p1', 'b1', 'white'))).toThrow(/full/);
+  });
+
+  it('rejects a bot whose color is already taken', () => {
+    const lobby = run(initialState(), [ALICE, BOB, CARA]);
+    expect(() => reduce(lobby, addBot('p1', 'b1', 'red'))).toThrow(/already taken/);
+  });
+
+  it('rejects adding a bot once the game has started', () => {
+    const started = run(initialState(), [ALICE, BOB, CARA, startAction('p1')]);
+    expect(() => reduce(started, addBot('p1', 'b1', 'white'))).toThrow(/in progress/);
+  });
+
+  it('removes a bot the owner added, emitting BOT_REMOVED', () => {
+    const withBot = run(initialState(), [ALICE, BOB, CARA, addBot('p1', 'b1', 'white')]);
+    const { state, events } = reduce(withBot, { type: 'REMOVE_BOT', actorId: 'p1', playerId: 'b1' });
+    expect(state.players.map((p) => p.id)).toEqual(['p1', 'p2', 'p3']);
+    expect(events).toContainEqual({ type: 'BOT_REMOVED', playerId: 'b1', name: 'Bot 1' });
+  });
+
+  it('refuses to remove a human via REMOVE_BOT', () => {
+    const lobby = run(initialState(), [ALICE, BOB, CARA]);
+    expect(() => reduce(lobby, { type: 'REMOVE_BOT', actorId: 'p1', playerId: 'p2' })).toThrow(/not a bot/);
+  });
+
+  it('rejects a non-owner removing a bot', () => {
+    const withBot = run(initialState(), [ALICE, BOB, CARA, addBot('p1', 'b1', 'white')]);
+    expect(() => reduce(withBot, { type: 'REMOVE_BOT', actorId: 'p2', playerId: 'b1' })).toThrow(/owner/);
+  });
+
+  it('carries bots into a New game', () => {
+    // Start with a bot, end the game, then New game keeps the bot seated.
+    const withBot = run(initialState(), [ALICE, BOB, addBot('p1', 'b1', 'white'), startAction('p1')]);
+    const ended = { ...withBot, phase: 'ENDED' as const };
+    const { state } = reduce(ended, { type: 'NEW_GAME', actorId: 'p1' });
+    expect(state.phase).toBe('LOBBY');
+    expect(state.players.find((p) => p.id === 'b1')?.isBot).toBe(true);
+  });
+});
+
 describe('owner assignment', () => {
   it('makes the first joiner the owner', () => {
     const state = run(initialState(), [ALICE, BOB]);

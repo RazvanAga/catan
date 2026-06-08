@@ -11,7 +11,7 @@
 
 import { Action, GameState, ReduceResult } from './types.js';
 import { IllegalActionError } from './rules/helpers.js';
-import { join, newGame, ownerId, startGame } from './rules/lobby.js';
+import { addBot, join, newGame, ownerId, removeBot, startGame } from './rules/lobby.js';
 import { setConnected, skipTurn, vacateSeat } from './rules/seats.js';
 import { placeSetupRoad, placeSetupSettlement } from './rules/setup.js';
 import { endTurn, roll } from './rules/turn.js';
@@ -71,6 +71,10 @@ function dispatch(state: GameState, action: Action): ReduceResult {
   switch (action.type) {
     case 'JOIN':
       return join(state, action);
+    case 'ADD_BOT':
+      return addBot(state, action);
+    case 'REMOVE_BOT':
+      return removeBot(state, action);
     case 'START_GAME':
       return startGame(state, action);
     case 'PLACE_SETUP_SETTLEMENT':

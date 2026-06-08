@@ -98,6 +98,7 @@ function stateWith(ids: string[], roads: Record<number, Road>): GameState {
     id,
     name: id,
     color: (['red', 'blue', 'orange', 'white'] as const)[i],
+    isBot: false,
     connected: true,
     vacant: false,
     hand: { brick: 0, wood: 0, sheep: 0, wheat: 0, ore: 0 },

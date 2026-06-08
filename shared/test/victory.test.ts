@@ -27,6 +27,7 @@ function playState(
     id,
     name: id,
     color: COLORS[i],
+    isBot: false,
     connected: true,
     vacant: false,
     hand: { brick: 0, wood: 0, sheep: 0, wheat: 0, ore: 0 },
