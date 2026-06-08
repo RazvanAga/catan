@@ -331,6 +331,22 @@ export class Room {
         return { type: 'BUILD_ROAD', actorId: botId, edge: move.edge };
       case 'buyDevCard':
         return { type: 'BUY_DEV_CARD', actorId: botId };
+      case 'playDevCard': {
+        const p = move.play;
+        if (p.card === 'knight') {
+          return {
+            type: 'PLAY_DEV_CARD',
+            actorId: botId,
+            play: {
+              card: 'knight',
+              tile: p.tile,
+              stealFrom: p.stealFrom,
+              stolen: p.stealFrom ? this.pickStolenCard(p.stealFrom) : null,
+            },
+          };
+        }
+        return { type: 'PLAY_DEV_CARD', actorId: botId, play: p };
+      }
       case 'moveRobber':
         return {
           type: 'MOVE_ROBBER',

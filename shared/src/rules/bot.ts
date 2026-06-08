@@ -30,12 +30,20 @@ import {
 } from './helpers.js';
 import { publicVictoryPoints } from './scoring.js';
 
+/** A dev-card play the bot wants, RNG-free (a knight's stolen card is server-rolled). */
+export type BotDevPlay =
+  | { card: 'knight'; tile: number; stealFrom: string | null }
+  | { card: 'road_building'; edges: number[] }
+  | { card: 'year_of_plenty'; resources: Resource[] }
+  | { card: 'monopoly'; resource: Resource };
+
 export type BotMove =
   | { kind: 'placeSetupSettlement'; vertex: number }
   | { kind: 'placeSetupRoad'; edge: number }
   | { kind: 'roll' }
   | { kind: 'discard'; resources: Partial<ResourceCounts> }
   | { kind: 'moveRobber'; tile: number; stealFrom: string | null }
+  | { kind: 'playDevCard'; play: BotDevPlay }
   | { kind: 'buildCity'; vertex: number }
   | { kind: 'buildSettlement'; vertex: number }
   | { kind: 'buildRoad'; edge: number }
@@ -135,6 +143,16 @@ function chooseDiscard(state: GameState, botId: string, need: number): Partial<R
  * buildings where possible. Then steal from the richest legal victim there.
  */
 function decideRobber(state: GameState, botId: string): BotMove {
+  const { tile, stealFrom } = chooseRobberTarget(state, botId);
+  return { kind: 'moveRobber', tile, stealFrom };
+}
+
+/**
+ * Pick where to move the robber (shared by the 7 and the Knight): the tile whose
+ * adjacent opponents have the most public VP, avoiding our own buildings where
+ * possible; then the richest legal victim there (or null when none).
+ */
+function chooseRobberTarget(state: GameState, botId: string): { tile: number; stealFrom: string | null } {
   const board = state.board!;
   let bestTile = -1;
   let bestScore = -Infinity;
@@ -165,7 +183,7 @@ function decideRobber(state: GameState, botId: string): BotMove {
       stealFrom = id;
     }
   }
-  return { kind: 'moveRobber', tile: bestTile, stealFrom };
+  return { tile: bestTile, stealFrom };
 }
 
 // --- ACTIONS: spend resources, high value first (issue 0018) ------------------
@@ -186,6 +204,9 @@ function countOwn(state: GameState, botId: string, kind: 'road' | 'settlement' |
  * END_TURN (resources strictly decrease, so it terminates).
  */
 function decideActions(state: GameState, botId: string): BotMove {
+  const dev = decidePlayDevCard(state, botId);
+  if (dev) return dev;
+
   const hand = getPlayer(state, botId)!.hand;
 
   if (canAfford(hand, BUILD_COSTS.city) && countOwn(state, botId, 'city') < PIECE_LIMITS.city) {
@@ -241,27 +262,91 @@ function bestSettlementVertex(state: GameState, botId: string): number | null {
 }
 
 /**
- * A legal free road connected to the bot's network, preferring one that reaches a
- * new (empty, distance-legal) high-pip settlement spot; falls back to any legal
- * road so the network can still grow toward future expansion.
+ * Legal free roads connected to the bot's network, sorted best-first: a road that
+ * reaches a new (empty, distance-legal) high-pip settlement spot outranks one that
+ * reaches none, so the network grows toward useful expansion.
  */
-function bestRoadEdge(state: GameState, botId: string): number | null {
+function legalRoadEdges(state: GameState, botId: string): number[] {
   const board = state.board!;
-  let best: number | null = null;
-  let bestScore = -1;
-  let fallback: number | null = null;
+  const scored: { e: number; score: number }[] = [];
   for (let e = 0; e < BOARD.edges.length; e++) {
     if (board.roads[e]) continue;
     if (!edgeConnectsToNetwork(board, e, botId)) continue;
-    if (fallback == null) fallback = e;
+    let score = 0;
     for (const v of BOARD.edges[e].vertices) {
-      if (!satisfiesDistanceRule(board, v)) continue;
-      const score = vertexPips(state, v);
-      if (score > bestScore) {
-        bestScore = score;
-        best = e;
-      }
+      if (satisfiesDistanceRule(board, v)) score = Math.max(score, vertexPips(state, v) + 1);
+    }
+    scored.push({ e, score });
+  }
+  scored.sort((a, b) => b.score - a.score || a.e - b.e);
+  return scored.map((s) => s.e);
+}
+
+function bestRoadEdge(state: GameState, botId: string): number | null {
+  return legalRoadEdges(state, botId)[0] ?? null;
+}
+
+// --- Development cards (issue 0019) -------------------------------------------
+
+/**
+ * Play at most one development card per turn, never one bought this turn. Ordered
+ * by impact: a knight (move the robber + steal, toward Largest Army), then a
+ * monopoly when opponents hold a worthwhile pile, then year-of-plenty toward a
+ * build, then road building when legal roads exist. Victory-point cards are never
+ * played — they only count. Returns null when nothing is worth playing.
+ */
+function decidePlayDevCard(state: GameState, botId: string): BotMove | null {
+  if (state.devCardPlayedThisTurn) return null;
+  const me = getPlayer(state, botId)!;
+  const playable = (card: string): boolean =>
+    me.devCards.some((d) => d.card === card && d.boughtOnTurn !== state.turnNumber);
+
+  if (playable('knight')) {
+    const { tile, stealFrom } = chooseRobberTarget(state, botId);
+    return { kind: 'playDevCard', play: { card: 'knight', tile, stealFrom } };
+  }
+  if (playable('monopoly')) {
+    const resource = bestMonopolyResource(state, botId);
+    if (resource) return { kind: 'playDevCard', play: { card: 'monopoly', resource } };
+  }
+  if (playable('year_of_plenty')) {
+    return { kind: 'playDevCard', play: { card: 'year_of_plenty', resources: bestYearOfPlenty(state, botId) } };
+  }
+  if (playable('road_building')) {
+    const all = legalRoadEdges(state, botId);
+    const room = PIECE_LIMITS.road - countOwn(state, botId, 'road');
+    const edges = all.slice(0, Math.min(2, room));
+    if (edges.length >= 1) return { kind: 'playDevCard', play: { card: 'road_building', edges } };
+  }
+  return null;
+}
+
+/** The resource opponents hold the most of in total (worth monopolizing), or null. */
+function bestMonopolyResource(state: GameState, botId: string): Resource | null {
+  let best: Resource | null = null;
+  let bestTotal = 0;
+  for (const r of RESOURCES) {
+    let total = 0;
+    for (const p of state.players) if (p.id !== botId) total += p.hand[r];
+    if (total > bestTotal) {
+      bestTotal = total;
+      best = r;
     }
   }
-  return best ?? fallback;
+  return best;
+}
+
+/** Two resources that move the bot toward its cheapest unaffordable build. */
+function bestYearOfPlenty(state: GameState, botId: string): Resource[] {
+  const hand = getPlayer(state, botId)!.hand;
+  for (const cost of [BUILD_COSTS.city, BUILD_COSTS.settlement, BUILD_COSTS.road, BUILD_COSTS.devCard]) {
+    const missing: Resource[] = [];
+    for (const r of RESOURCES) {
+      const gap = ((cost as Partial<ResourceCounts>)[r] ?? 0) - hand[r];
+      for (let i = 0; i < gap; i++) missing.push(r);
+    }
+    if (missing.length === 1) return [missing[0], missing[0]];
+    if (missing.length === 2) return missing;
+  }
+  return ['wheat', 'ore'];
 }

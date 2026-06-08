@@ -10,6 +10,7 @@ import {
   Action,
   BOARD,
   BotMove,
+  DevCard,
   GameState,
   Resource,
   decideBotMove,
@@ -68,6 +69,18 @@ function toAction(s: GameState, id: string, move: BotMove, dice: () => [number, 
       return { type: 'BUILD_ROAD', actorId: id, edge: move.edge };
     case 'buyDevCard':
       return { type: 'BUY_DEV_CARD', actorId: id };
+    case 'playDevCard': {
+      const p = move.play;
+      if (p.card === 'knight') {
+        const victim = p.stealFrom ? s.players.find((pl) => pl.id === p.stealFrom)! : null;
+        return {
+          type: 'PLAY_DEV_CARD',
+          actorId: id,
+          play: { card: 'knight', tile: p.tile, stealFrom: p.stealFrom, stolen: victim ? pickRandomCard(victim.hand, steal) : null },
+        };
+      }
+      return { type: 'PLAY_DEV_CARD', actorId: id, play: p };
+    }
     case 'moveRobber': {
       const victim = move.stealFrom ? s.players.find((p) => p.id === move.stealFrom)! : null;
       return {
@@ -100,7 +113,7 @@ function autoPlay(state: GameState, dice: () => [number, number], turns: number)
   let s = state;
   let steps = 0;
   while (s.turnNumber < target && s.phase === 'PLAY') {
-    if (steps++ > 5000) throw new Error('bot loop did not terminate');
+    if (steps++ > 50000) throw new Error('bot loop did not terminate');
     const id = owing(s);
     if (!id) throw new Error('no seat owes input');
     const move = decideBotMove(s, id);
@@ -243,6 +256,96 @@ describe('decideBotMove — ACTIONS building ladder', () => {
     // Setup leaves 6 settlements (6 pts); real building must have happened.
     expect(buildingPoints(after)).toBeGreaterThan(6);
   });
+});
+
+// --- Development cards (issue 0019) ------------------------------------------
+
+function withDev(state: GameState, id: string, card: DevCard, boughtOnTurn: number): GameState {
+  return {
+    ...state,
+    players: state.players.map((p) =>
+      p.id === id ? { ...p, devCards: [...p.devCards, { card, boughtOnTurn }] } : p,
+    ),
+  };
+}
+
+describe('decideBotMove — development cards', () => {
+  it('plays a knight, moving the robber and counting toward Largest Army', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(withDev(s, id, 'knight', 0), id, {});
+    const move = decideBotMove(s, id)!;
+    expect(move.kind).toBe('playDevCard');
+    expect((move as { play: { card: string } }).play.card).toBe('knight');
+    const after = reduce(s, toAction(s, id, move, () => [2, 3])).state;
+    expect(after.players.find((p) => p.id === id)!.knightsPlayed).toBe(1);
+  });
+
+  it('will not play a card bought this turn', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(withDev(s, id, 'knight', s.turnNumber), id, {}); // bought this turn
+    expect(decideBotMove(s, id)).toEqual({ kind: 'endTurn' });
+  });
+
+  it('plays at most one dev card per turn', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(withDev({ ...s, devCardPlayedThisTurn: true }, id, 'knight', 0), id, {});
+    expect(decideBotMove(s, id)).toEqual({ kind: 'endTurn' });
+  });
+
+  it('plays monopoly on the resource opponents hold most of', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    const [, p2, p3] = s.players;
+    s = setHand(s, p2.id, { wheat: 3 });
+    s = setHand(s, p3.id, { wheat: 2, ore: 1 });
+    s = setHand(withDev(s, id, 'monopoly', 0), id, {});
+    const move = decideBotMove(s, id)!;
+    expect(move).toEqual({ kind: 'playDevCard', play: { card: 'monopoly', resource: 'wheat' } });
+    expect(() => reduce(s, toAction(s, id, move, () => [2, 3]))).not.toThrow();
+  });
+
+  it('plays year of plenty toward an almost-affordable build', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(withDev(s, id, 'year_of_plenty', 0), id, { wheat: 2, ore: 2 }); // one ore short of a city
+    const move = decideBotMove(s, id)!;
+    expect(move.kind).toBe('playDevCard');
+    const play = (move as { play: { card: string; resources: Resource[] } }).play;
+    expect(play.card).toBe('year_of_plenty');
+    expect(play.resources).toHaveLength(2);
+    expect(() => reduce(s, toAction(s, id, move, () => [2, 3]))).not.toThrow();
+  });
+
+  it('plays road building on legal edges', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(withDev(s, id, 'road_building', 0), id, {});
+    const move = decideBotMove(s, id)!;
+    expect(move.kind).toBe('playDevCard');
+    expect((move as { play: { card: string } }).play.card).toBe('road_building');
+    expect(() => reduce(s, toAction(s, id, move, () => [2, 3]))).not.toThrow();
+  });
+
+  it('never plays a victory-point card', () => {
+    let s = inActions(driveSetup(started()));
+    const id = s.players[s.turnIndex].id;
+    s = setHand(withDev(s, id, 'victory_point', 0), id, {});
+    expect(decideBotMove(s, id)).toEqual({ kind: 'endTurn' });
+  });
+
+  it('buys, plays knights, and earns Largest Army in a real game', () => {
+    const knights: DevCard[] = Array<DevCard>(20).fill('knight');
+    const play = driveSetup({ ...started(), devDeck: knights });
+    const after = autoPlay(play, diceCycler(), 150);
+    // End-to-end: bots bought and played enough knights for one to take the bonus.
+    expect(after.bonuses.largestArmy).not.toBeNull();
+    expect(Math.max(...after.players.map((p) => p.knightsPlayed))).toBeGreaterThanOrEqual(3);
+  });
+  // A full all-bot 10-VP victory needs bank trading to unblock resource-starved
+  // bots; that end-to-end test lives in issue 0021.
 });
 
 describe('decideBotMove — the 7', () => {
