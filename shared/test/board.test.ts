@@ -109,6 +109,19 @@ describe('random board content', () => {
     expect(tokens).not.toContain(7);
   });
 
+  it('never places two red tokens (6/8) on adjacent tiles', () => {
+    const adjacent = BOARD.edges.filter((e) => e.tiles.length === 2);
+    const red = new Set([6, 8]);
+    for (let seed = 0; seed < 200; seed++) {
+      const { tileTokens } = createBoardSetup(seededRng(seed));
+      for (const e of adjacent) {
+        const [a, b] = e.tiles;
+        const bothRed = red.has(tileTokens[a] ?? 0) && red.has(tileTokens[b] ?? 0);
+        expect(bothRed).toBe(false);
+      }
+    }
+  });
+
   it('assigns 4 generic + 5 specific ports', () => {
     const setup = createBoardSetup(seededRng(7));
     expect(setup.portTypes).toHaveLength(9);

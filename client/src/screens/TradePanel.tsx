@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { GameView, RESOURCES, Resource } from '@catan/shared';
 import { commands } from '../socket';
 import { RESOURCE_LABEL } from '../colors';
+import { ResSelect, Counter } from './tradeControls';
 
 type ResMap = Partial<Record<Resource, number>>;
 
@@ -29,27 +30,40 @@ export function TradePanel({ view, canAct }: { view: GameView; canAct: boolean }
 }
 
 function ProposeForm({ view }: { view: GameView }) {
-  const [give, setGive] = useState<ResMap>({});
-  const [want, setWant] = useState<ResMap>({});
+  const [give, setGive] = useState<Resource>('wood');
+  const [want, setWant] = useState<Resource>('brick');
+  const [giveN, setGiveN] = useState(1);
+  const [wantN, setWantN] = useState(1);
   const hand = view.you?.hand;
+  const have = hand?.[give] ?? 0;
 
-  const giveTotal = RESOURCES.reduce((a, r) => a + (give[r] ?? 0), 0);
-  const wantTotal = RESOURCES.reduce((a, r) => a + (want[r] ?? 0), 0);
-  const affordable = RESOURCES.every((r) => (give[r] ?? 0) <= (hand?.[r] ?? 0));
-  const ok = giveTotal > 0 && wantTotal > 0 && affordable;
+  const ok = give !== want && giveN > 0 && wantN > 0 && have >= giveN;
 
   return (
     <div className="trade">
       <div className="trade-title">Propose a trade</div>
-      <Stepper label="You give" map={give} setMap={setGive} max={(r) => hand?.[r] ?? 0} />
-      <Stepper label="You want" map={want} setMap={setWant} />
+      <div className="trade-row">
+        <span className="trade-row-label">Give</span>
+        <ResSelect value={give} onChange={setGive} emptyOf={(r) => (hand?.[r] ?? 0) === 0} />
+        <div className="trade-row-right">
+          <Counter value={giveN} onChange={setGiveN} min={1} max={Math.max(1, have)} />
+        </div>
+      </div>
+      <div className="trade-row">
+        <span className="trade-row-label">Get</span>
+        <ResSelect value={want} onChange={setWant} />
+        <div className="trade-row-right">
+          <Counter value={wantN} onChange={setWantN} min={1} />
+        </div>
+      </div>
       <button
         className="build-btn"
         disabled={!ok}
+        title={ok ? '' : give === want ? 'Pick different resources' : have < giveN ? `You only have ${have}` : ''}
         onClick={() => {
-          commands.proposeTrade(give, want);
-          setGive({});
-          setWant({});
+          commands.proposeTrade({ [give]: giveN }, { [want]: wantN });
+          setGiveN(1);
+          setWantN(1);
         }}
       >
         Send proposal
@@ -116,37 +130,3 @@ function ResponderView({ view }: { view: GameView }) {
   );
 }
 
-function Stepper({
-  label,
-  map,
-  setMap,
-  max,
-}: {
-  label: string;
-  map: ResMap;
-  setMap: (m: ResMap) => void;
-  max?: (r: Resource) => number;
-}) {
-  function set(r: Resource, n: number) {
-    const cap = max ? max(r) : 99;
-    const clamped = Math.max(0, Math.min(cap, n));
-    setMap({ ...map, [r]: clamped });
-  }
-  return (
-    <div className="stepper">
-      <div className="stepper-label">{label}</div>
-      <div className="stepper-grid">
-        {RESOURCES.map((r) => (
-          <div key={r} className="stepper-cell">
-            <img src={`/icons/${r}.png`} className="stepper-res-icon" alt={r} />
-            <div className="stepper-controls">
-              <button onClick={() => set(r, (map[r] ?? 0) - 1)}>−</button>
-              <span>{map[r] ?? 0}</span>
-              <button onClick={() => set(r, (map[r] ?? 0) + 1)}>+</button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}

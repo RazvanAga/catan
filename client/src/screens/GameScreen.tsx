@@ -23,8 +23,9 @@ import {
   robberVictimsAt,
 } from '../game/affordances';
 import { TradePanel } from './TradePanel';
-import { COLOR_HEX, RESOURCE_LABEL } from '../colors';
-import { Road, House, Castle, FileQuestion } from 'lucide-react';
+import { ResSelect } from './tradeControls';
+import { COLOR_HEX } from '../colors';
+import { Road, House, Castle, FileQuestion, Swords, File, Crown } from 'lucide-react';
 
 export function GameScreen() {
   const view = useStore((s) => s.view)!;
@@ -117,88 +118,107 @@ export function GameScreen() {
 
   return (
     <div className="game-layout">
-      <div className="board-wrap">
-        <Board
-          view={view}
-          highlightVertices={highlightVertices}
-          highlightEdges={highlightEdges}
-          highlightTiles={highlightTiles}
-          onVertexClick={onVertexClick}
-          onEdgeClick={onEdgeClick}
-          onTileClick={onTileClick}
-        />
+      <aside className="rail">
+        <div className="brand">CATAN</div>
+        <div className="rail-panels">
+          <div className="rail-scoreboard">
+            <Players view={view} />
+          </div>
+          {canBuild && <BankTrade view={view} />}
+          {view.phase === 'PLAY' && <TradePanel view={view} canAct={canBuild} />}
+        </div>
+      </aside>
+
+      <div className="board-stage">
+        <div className="board-wrap">
+          <Board
+            view={view}
+            highlightVertices={highlightVertices}
+            highlightEdges={highlightEdges}
+            highlightTiles={highlightTiles}
+            onVertexClick={onVertexClick}
+            onEdgeClick={onEdgeClick}
+            onTileClick={onTileClick}
+          />
+        </div>
+
+        <div className="stage-foreground">
+          {view.phase === 'PLAY' && <DiscardPanel view={view} />}
+          {mustMoveRobber && (
+            <RobberPanel
+              view={view}
+              tile={robberTile}
+              onSteal={(victim) => {
+                if (robberTile != null) commands.moveRobber(robberTile, victim);
+                setRobberTile(null);
+              }}
+              onCancel={() => setRobberTile(null)}
+            />
+          )}
+          {dev === 'knight' && (
+            <RobberPanel
+              view={view}
+              tile={knightTile}
+              title="Knight — move the robber"
+              onSteal={(victim) => {
+                if (knightTile != null) commands.playDevCard({ card: 'knight', tile: knightTile, stealFrom: victim });
+                resetDev();
+              }}
+              onCancel={resetDev}
+            />
+          )}
+          {dev === 'road' && (
+            <div className="robber">
+              <div className="robber-title">Road Building — pick {2 - roadEdges.length} road(s)</div>
+              <p className="build-hint">Click highlighted edges.</p>
+              {roadEdges.length === 1 && (
+                <button
+                  className="build-btn"
+                  onClick={() => {
+                    commands.playDevCard({ card: 'road_building', edges: roadEdges });
+                    resetDev();
+                  }}
+                >
+                  Place just this one
+                </button>
+              )}
+              <button className="build-btn" onClick={resetDev}>
+                Cancel
+              </button>
+            </div>
+          )}
+          {dev === 'yop' && (
+            <PickResources
+              title="Year of Plenty — take 2"
+              count={2}
+              onConfirm={(resources) => {
+                commands.playDevCard({ card: 'year_of_plenty', resources });
+                resetDev();
+              }}
+              onCancel={resetDev}
+            />
+          )}
+          {dev === 'monopoly' && (
+            <PickResources
+              title="Monopoly — claim all of one"
+              count={1}
+              onConfirm={(resources) => {
+                commands.playDevCard({ card: 'monopoly', resource: resources[0] });
+                resetDev();
+              }}
+              onCancel={resetDev}
+            />
+          )}
+          {error && <p className="error">{error}</p>}
+        </div>
       </div>
 
-      <aside className="sidebar">
-        <Banner view={view} myTurn={myTurn} />
-        {view.phase === 'PLAY' && <ActionBar view={view} myTurn={myTurn} />}
-        {view.phase === 'PLAY' && <DiscardPanel view={view} />}
-        {mustMoveRobber && (
-          <RobberPanel
-            view={view}
-            tile={robberTile}
-            onSteal={(victim) => {
-              if (robberTile != null) commands.moveRobber(robberTile, victim);
-              setRobberTile(null);
-            }}
-            onCancel={() => setRobberTile(null)}
-          />
+      <Hand view={view} />
+
+      <div className="action-bar">
+        {canBuild && (
+          <BuildBar view={view} mode={buildMode} setMode={setBuildMode} canBuyDev={canBuild} onBuyDev={() => commands.buyDevCard()} />
         )}
-        {dev === 'knight' && (
-          <RobberPanel
-            view={view}
-            tile={knightTile}
-            title="Knight — move the robber"
-            onSteal={(victim) => {
-              if (knightTile != null) commands.playDevCard({ card: 'knight', tile: knightTile, stealFrom: victim });
-              resetDev();
-            }}
-            onCancel={resetDev}
-          />
-        )}
-        {dev === 'road' && (
-          <div className="robber">
-            <div className="robber-title">Road Building — pick {2 - roadEdges.length} road(s)</div>
-            <p className="build-hint">Click highlighted edges.</p>
-            {roadEdges.length === 1 && (
-              <button
-                className="build-btn"
-                onClick={() => {
-                  commands.playDevCard({ card: 'road_building', edges: roadEdges });
-                  resetDev();
-                }}
-              >
-                Place just this one
-              </button>
-            )}
-            <button className="build-btn" onClick={resetDev}>
-              Cancel
-            </button>
-          </div>
-        )}
-        {dev === 'yop' && (
-          <PickResources
-            title="Year of Plenty — take 2"
-            count={2}
-            onConfirm={(resources) => {
-              commands.playDevCard({ card: 'year_of_plenty', resources });
-              resetDev();
-            }}
-            onCancel={resetDev}
-          />
-        )}
-        {dev === 'monopoly' && (
-          <PickResources
-            title="Monopoly — claim all of one"
-            count={1}
-            onConfirm={(resources) => {
-              commands.playDevCard({ card: 'monopoly', resource: resources[0] });
-              resetDev();
-            }}
-            onCancel={resetDev}
-          />
-        )}
-        {canBuild && <BuildBar view={view} mode={buildMode} setMode={setBuildMode} canBuyDev={canBuild} onBuyDev={() => commands.buyDevCard()} />}
         {view.phase === 'PLAY' && (
           <DevPanel
             view={view}
@@ -212,12 +232,10 @@ export function GameScreen() {
             }}
           />
         )}
-        {canBuild && <BankTrade view={view} />}
-        {view.phase === 'PLAY' && <TradePanel view={view} canAct={canBuild} />}
-        {error && <p className="error">{error}</p>}
-        <Players view={view} />
-        <Hand view={view} />
-      </aside>
+        <div className="action-spacer" />
+        {view.phase === 'PLAY' && <ActionBar view={view} myTurn={myTurn} />}
+        <Banner view={view} myTurn={myTurn} />
+      </div>
     </div>
   );
 }
@@ -360,40 +378,27 @@ function ActionBar({ view, myTurn }: { view: GameView; myTurn: boolean }) {
   );
 }
 
-function ResSelect({ value, onChange }: { value: Resource; onChange: (r: Resource) => void }) {
-  return (
-    <div className="res-select">
-      {RESOURCES.map((r) => (
-        <button
-          key={r}
-          className={`res-select-btn${r === value ? ' selected' : ''}`}
-          onClick={() => onChange(r)}
-          title={RESOURCE_LABEL[r]}
-        >
-          <img src={`/icons/${r}.png`} alt={r} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function BankTrade({ view }: { view: GameView }) {
   const [give, setGive] = useState<Resource>('wood');
   const [receive, setReceive] = useState<Resource>('brick');
+  const hand = view.you?.hand;
   const ratio = bankRatio(view, give);
-  const have = view.you?.hand[give] ?? 0;
+  const have = hand?.[give] ?? 0;
   const ok = give !== receive && have >= ratio;
   return (
-    <div className="banktrade">
-      <div className="banktrade-title">Bank / port trade</div>
-      <div className="banktrade-row">
-        <span>Give</span>
-        <ResSelect value={give} onChange={setGive} />
-        <span className="ratio">{ratio}:1</span>
+    <div className="trade">
+      <div className="trade-title">Bank / port trade</div>
+      <div className="trade-row">
+        <span className="trade-row-label">Give</span>
+        <ResSelect value={give} onChange={setGive} emptyOf={(r) => (hand?.[r] ?? 0) === 0} />
+        <div className="trade-row-right">
+          <span className="ratio">{ratio}:1</span>
+        </div>
       </div>
-      <div className="banktrade-row">
-        <span>Get</span>
+      <div className="trade-row">
+        <span className="trade-row-label">Get</span>
         <ResSelect value={receive} onChange={setReceive} />
+        <div className="trade-row-right" />
       </div>
       <button
         className="build-btn"
@@ -659,14 +664,32 @@ function Players({ view }: { view: GameView }) {
             )}
           </span>
           <span className="roster-stats">
-            {view.bonuses.longestRoad === p.id && (
-              <span title={`Longest Road (${view.bonuses.longestRoadLength}) +2 VP`}>🛣️</span>
-            )}
-            {view.bonuses.largestArmy === p.id && (
-              <span title={`Largest Army (${view.bonuses.largestArmyCount}) +2 VP`}>⚔️</span>
-            )}
-            <span title="victory points">{p.publicVictoryPoints} VP</span>
-            <span title="resource cards">🂠 {p.handCount}</span>
+            <span
+              className={`stat${view.bonuses.longestRoad === p.id ? ' stat-bonus' : ''}`}
+              title={view.bonuses.longestRoad === p.id ? 'Longest road — Longest Road +2 VP' : 'Longest road'}
+            >
+              {p.roadLength}
+              <Road size={14} />
+            </span>
+            <span
+              className={`stat${view.bonuses.largestArmy === p.id ? ' stat-bonus' : ''}`}
+              title={view.bonuses.largestArmy === p.id ? 'Army size — Largest Army +2 VP' : 'Army size'}
+            >
+              {p.knightsPlayed}
+              <Swords size={14} />
+            </span>
+            <span className="stat" title="Development cards">
+              {p.devCardCount}
+              <FileQuestion size={14} />
+            </span>
+            <span className="stat" title="Resource cards">
+              {p.handCount}
+              <File size={14} />
+            </span>
+            <span className="stat" title="Victory points">
+              {p.publicVictoryPoints}
+              <Crown size={14} />
+            </span>
           </span>
         </li>
       ))}

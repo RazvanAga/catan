@@ -37,6 +37,24 @@ const TOKEN_BAG: number[] = [2, 3, 3, 4, 4, 5, 5, 6, 6, 8, 8, 9, 9, 10, 10, 11, 
 /** 9 ports: 4 generic 3:1 + one specific 2:1 per resource. */
 const PORT_BAG: PortType[] = ['3:1', '3:1', '3:1', '3:1', 'brick', 'wood', 'sheep', 'wheat', 'ore'];
 
+/** The "red" high-frequency tokens that must not touch on the physical board. */
+const RED_TOKENS = new Set([6, 8]);
+
+/**
+ * Pairs of tile ids that share an edge (i.e. physically adjacent hexes), derived
+ * once from the frozen topology. Each interior edge borders exactly two tiles.
+ */
+const ADJACENT_TILE_PAIRS: [number, number][] = BOARD.edges
+  .filter((e) => e.tiles.length === 2)
+  .map((e) => [e.tiles[0], e.tiles[1]]);
+
+/** True if any two adjacent tiles both carry a red (6/8) token. */
+function hasAdjacentRed(tileTokens: (number | null)[]): boolean {
+  return ADJACENT_TILE_PAIRS.some(
+    ([a, b]) => RED_TOKENS.has(tileTokens[a] ?? 0) && RED_TOKENS.has(tileTokens[b] ?? 0),
+  );
+}
+
 /** Fisher–Yates shuffle using an injected RNG; returns a new array. */
 export function shuffle<T>(items: readonly T[], rng: () => number): T[] {
   const a = [...items];
@@ -50,23 +68,20 @@ export function shuffle<T>(items: readonly T[], rng: () => number): T[] {
 /**
  * Produce a random base-game board arrangement. Pure given `rng`, so it is
  * deterministic and testable; the server supplies a real RNG. Number tokens are
- * dealt to the non-desert tiles in shuffled order (v1 does not enforce the
- * physical board's red-number adjacency rule).
+ * re-dealt to the non-desert tiles until no two red tokens (6 or 8) sit on
+ * adjacent tiles — the physical board's balance rule. A near-certain few
+ * attempts suffice; the cap just guarantees termination.
  */
 export function createBoardSetup(rng: () => number = Math.random): BoardSetup {
   const tileResources = shuffle(RESOURCE_BAG, rng);
-  const tokens = shuffle(TOKEN_BAG, rng);
+  const robberTile = tileResources.indexOf('desert');
 
-  const tileTokens: (number | null)[] = [];
-  let robberTile = 0;
-  let t = 0;
-  for (let id = 0; id < tileResources.length; id++) {
-    if (tileResources[id] === 'desert') {
-      tileTokens.push(null);
-      robberTile = id;
-    } else {
-      tileTokens.push(tokens[t++]);
-    }
+  let tileTokens: (number | null)[] = [];
+  for (let attempt = 0; attempt < 1000; attempt++) {
+    const tokens = shuffle(TOKEN_BAG, rng);
+    let t = 0;
+    tileTokens = tileResources.map((res) => (res === 'desert' ? null : tokens[t++]));
+    if (!hasAdjacentRed(tileTokens)) break;
   }
 
   const portTypes = shuffle(PORT_BAG, rng).slice(0, BOARD.ports.length);

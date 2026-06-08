@@ -171,10 +171,18 @@ describe('decideBotMove — setup', () => {
 describe('decideBotMove — turn loop', () => {
   it('rolls when it must, then ends the turn in ACTIONS', () => {
     const play = driveSetup(started());
-    expect(decideBotMove(play, play.players[play.turnIndex].id)).toEqual({ kind: 'roll' });
-    const rolled = reduce(play, { type: 'ROLL', actorId: play.players[play.turnIndex].id, dice: [2, 3] }).state;
-    expect(rolled.turnPhase).toBe('ACTIONS');
-    expect(decideBotMove(rolled, rolled.players[rolled.turnIndex].id)).toEqual({ kind: 'endTurn' });
+    const id = play.players[play.turnIndex].id;
+    expect(decideBotMove(play, id)).toEqual({ kind: 'roll' });
+    let s = reduce(play, { type: 'ROLL', actorId: id, dice: [2, 3] }).state;
+    expect(s.turnPhase).toBe('ACTIONS');
+    // In ACTIONS the bot may spend its income building first, but always
+    // finishes the turn by ending it.
+    let move = decideBotMove(s, id)!;
+    for (let guard = 0; move.kind !== 'endTurn' && guard < 50; guard++) {
+      s = reduce(s, toAction(s, id, move, () => [2, 3])).state;
+      move = decideBotMove(s, id)!;
+    }
+    expect(move).toEqual({ kind: 'endTurn' });
   });
 
   it('cycles many turns to completion (non-7 rolls)', () => {

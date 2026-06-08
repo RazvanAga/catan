@@ -21,6 +21,7 @@ import {
 } from './types.js';
 import { ownerId } from './reducer.js';
 import { hiddenVictoryPoints, publicVictoryPoints, totalVictoryPoints } from './rules/scoring.js';
+import { playerLongestRoad } from './rules/longestRoad.js';
 
 /**
  * A player's full final tally, revealed to everyone once the game has ENDED.
@@ -48,6 +49,8 @@ export interface PlayerView {
   /** Total development cards held (hidden contents). */
   devCardCount: number;
   knightsPlayed: number;
+  /** Longest continuous road length (for the Longest Road race). */
+  roadLength: number;
   /** VP everyone can see (excludes hidden VP cards). */
   publicVictoryPoints: number;
   isCurrentTurn: boolean;
@@ -134,6 +137,7 @@ export function projectStateForPlayer(state: GameState, playerId: string | null)
     handCount: sumHand(p.hand),
     devCardCount: p.devCards.length,
     knightsPlayed: p.knightsPlayed,
+    roadLength: state.board ? playerLongestRoad(state.board, p.id) : 0,
     publicVictoryPoints: publicVictoryPoints(state, p.id),
     isCurrentTurn: p.id === currentId,
     isPreviousWinner: p.id === state.previousWinnerId,

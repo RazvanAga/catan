@@ -216,27 +216,127 @@ button.secondary:disabled {
 }
 
 /* --- In-game layout --- */
+/* L-shaped menu: a full-height rail down the left and a bar across the bottom,
+   meeting at the lower-left corner. The board fills the remaining top-right area. */
 .game-layout {
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 16px;
-  min-height: 100vh;
-  padding: 16px;
+  grid-template-columns: 380px 1fr;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    'rail board'
+    'hand bar';
+  height: 100vh;
+  gap: 12px;
+  padding: 12px;
+  overflow: hidden;
 }
 
-.board-wrap {
+.rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.brand {
+  font-size: 3rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-align: center;
+  color: var(--accent);
+  padding: 8px 6px 4px;
+  text-shadow: 0 2px 8px #0006;
+}
+
+/* Sits at the top of the rail just under the CATAN title. */
+.rail-panels {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 14px;
+}
+
+/* The scoreboard is fixed at the top below the title; the trade panels appear
+   below it (and above the hand) without ever shifting it. */
+.rail-scoreboard {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+}
+
+/* The board fills its cell; interaction panels float on top of it. */
+.board-stage {
+  grid-area: board;
+  position: relative;
+  min-height: 0;
   display: grid;
   place-items: center;
+  padding: 12px;
   background: #16202c;
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 12px;
+}
+
+.board-wrap {
+  display: contents;
 }
 
 .board {
   width: 100%;
-  height: auto;
-  max-height: calc(100vh - 56px);
+  height: 100%;
+  /* SVG viewBox + default preserveAspectRatio letterboxes to fit without scroll. */
+}
+
+/* Interaction layer: discard/robber/dev pickers, anchored bottom-center. */
+.stage-foreground {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  pointer-events: none;
+}
+
+.stage-foreground > * {
+  pointer-events: auto;
+  width: 320px;
+  max-width: 360px;
+}
+
+/* The bottom action bar: hand, build, your-turn banner, dice. */
+.action-bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.action-spacer {
+  flex: 1;
+}
+
+/* Dev cards sit next to the build buttons; lay them out horizontally so the
+   bar stays short instead of growing a vertical list. */
+.action-bar .devpanel {
+  padding: 6px 10px;
+}
+
+.action-bar .devlist {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.action-bar .devlist-row {
+  gap: 6px;
 }
 
 .board .clickable {
@@ -247,11 +347,6 @@ button.secondary:disabled {
   fill-opacity: 0.85;
 }
 
-.sidebar {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
 
 .banner {
   background: var(--card);
@@ -278,7 +373,7 @@ button.secondary:disabled {
 }
 
 .roster-row.current {
-  outline: 1px solid var(--accent);
+  box-shadow: inset 0 0 0 2px var(--accent);
 }
 
 .roster-row.offline {
@@ -287,16 +382,34 @@ button.secondary:disabled {
 
 .roster-stats {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   font-size: 0.8rem;
   color: var(--muted);
 }
 
+.stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat svg {
+  opacity: 0.85;
+}
+
+/* The player currently holding Longest Road / Largest Army. */
+.stat-bonus {
+  color: var(--accent);
+}
+
 .hand {
+  grid-area: hand;
+  align-self: stretch;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 14px 16px;
+  padding: 10px 12px;
 }
 
 .hand-title {
@@ -555,37 +668,46 @@ button.secondary:disabled {
   font-size: 0.85rem;
 }
 
-.banktrade {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.banktrade-title {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
-
-.banktrade-row {
+/* Shared bank + player trade row: label · resource icons · ratio/counter. */
+.trade-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
-.banktrade-row > span:first-child {
-  width: 38px;
+.trade-row-label {
+  width: 36px;
+  flex-shrink: 0;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+/* Fixed-width icon block so the give/get rows stay aligned regardless of the
+   label text width, and the ratio/counter is pushed to a consistent right edge. */
+.trade-row-right {
+  margin-left: auto;
+  min-width: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.counter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.counter-n {
+  min-width: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }
 
 .res-select {
   display: flex;
   gap: 4px;
-  flex: 1;
+  flex-shrink: 0;
 }
 
 .res-select-btn {
@@ -608,6 +730,16 @@ button.secondary:disabled {
   opacity: 1;
   border-color: var(--accent);
   background: #1e3050;
+}
+
+/* Resources the player holds none of (give rows), greyed like empty hand cards. */
+.res-select-btn.empty {
+  filter: grayscale(1);
+  opacity: 0.3;
+}
+
+.res-select-btn.empty:hover {
+  opacity: 0.35;
 }
 
 .res-select-btn img {
@@ -685,49 +817,6 @@ button.secondary:disabled {
 .build-btn.small {
   padding: 4px 8px;
   font-size: 0.8rem;
-}
-
-.stepper-label {
-  font-size: 0.78rem;
-  color: var(--muted);
-  margin-bottom: 4px;
-}
-
-.stepper-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-}
-
-.stepper-cell {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  font-size: 0.65rem;
-}
-
-.stepper-res-icon {
-  width: 28px;
-  height: 28px;
-  object-fit: contain;
-}
-
-.stepper-controls {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.stepper-controls button {
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  border: 1px solid var(--border);
-  background: #1a2330;
-  color: var(--text);
-  cursor: pointer;
-  line-height: 1;
 }
 
 .reset-room {
