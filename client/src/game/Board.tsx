@@ -15,6 +15,9 @@ interface BoardProps {
   highlightVertices?: Set<number>;
   highlightEdges?: Set<number>;
   highlightTiles?: Set<number>;
+  /** Vertices/edges whose piece should play its pop-in animation right now. */
+  poppedVertices?: ReadonlySet<number>;
+  poppedEdges?: ReadonlySet<number>;
   onVertexClick?: (vertex: number) => void;
   onEdgeClick?: (edge: number) => void;
   onTileClick?: (tile: number) => void;
@@ -30,6 +33,8 @@ export function Board({
   highlightVertices,
   highlightEdges,
   highlightTiles,
+  poppedVertices,
+  poppedEdges,
   onVertexClick,
   onEdgeClick,
   onTileClick,
@@ -143,6 +148,7 @@ export function Board({
         return (
           <line
             key={`r${edgeId}`}
+            className={poppedEdges?.has(Number(edgeId)) ? 'road-popped' : undefined}
             x1={BOARD.vertices[a].pixel.x}
             y1={BOARD.vertices[a].pixel.y}
             x2={BOARD.vertices[b].pixel.x}
@@ -225,10 +231,11 @@ export function Board({
       {Object.entries(board.buildings).map(([vid, b]) => {
         const p = BOARD.vertices[Number(vid)].pixel;
         const fill = colorOf(view, b.owner);
+        const popped = poppedVertices?.has(Number(vid)) ? 'piece-popped' : undefined;
         return b.city ? (
-          <rect key={`b${vid}`} x={p.x - 9} y={p.y - 9} width={18} height={18} rx={3} fill={fill} stroke="#0d141d" strokeWidth={2} />
+          <rect key={`b${vid}`} className={popped} x={p.x - 9} y={p.y - 9} width={18} height={18} rx={3} fill={fill} stroke="#0d141d" strokeWidth={2} />
         ) : (
-          <circle key={`b${vid}`} cx={p.x} cy={p.y} r={8} fill={fill} stroke="#0d141d" strokeWidth={2} />
+          <circle key={`b${vid}`} className={popped} cx={p.x} cy={p.y} r={8} fill={fill} stroke="#0d141d" strokeWidth={2} />
         );
       })}
 

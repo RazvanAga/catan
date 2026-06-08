@@ -4,6 +4,7 @@ export * from './deck.js';
 export * from './reducer.js';
 export * from './projection.js';
 export * from './protocol.js';
+export * from './effects.js';
 export {
   buildingPoints,
   publicVictoryPoints,

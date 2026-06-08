@@ -10,6 +10,7 @@ import { BUILD_COSTS, DevCard, GameView, RESOURCES, Resource, canAfford } from '
 import { useStore } from '../store';
 import { commands } from '../socket';
 import { Board } from '../game/Board';
+import { useGameEffects } from '../game/useGameEffects';
 import {
   BuildKind,
   bankRatio,
@@ -31,6 +32,8 @@ export function GameScreen() {
   const view = useStore((s) => s.view)!;
   const error = useStore((s) => s.error);
   const myTurn = isMyTurn(view);
+  // Event-driven board effects (pieces pop in as they're built, incl. on bot turns).
+  const { poppedVertices, poppedEdges } = useGameEffects();
   const [buildMode, setBuildMode] = useState<BuildKind | null>(null);
   // When the robber lands on a tile with multiple stealable players, hold the
   // chosen tile here until the active player picks whom to steal from.
@@ -136,6 +139,8 @@ export function GameScreen() {
             highlightVertices={highlightVertices}
             highlightEdges={highlightEdges}
             highlightTiles={highlightTiles}
+            poppedVertices={poppedVertices}
+            poppedEdges={poppedEdges}
             onVertexClick={onVertexClick}
             onEdgeClick={onEdgeClick}
             onTileClick={onTileClick}
