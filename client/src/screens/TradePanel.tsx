@@ -138,7 +138,7 @@ function Stepper({
       <div className="stepper-grid">
         {RESOURCES.map((r) => (
           <div key={r} className="stepper-cell">
-            <span className="stepper-res">{RESOURCE_LABEL[r]}</span>
+            <img src={`/icons/${r}.png`} className="stepper-res-icon" alt={r} />
             <div className="stepper-controls">
               <button onClick={() => set(r, (map[r] ?? 0) - 1)}>−</button>
               <span>{map[r] ?? 0}</span>

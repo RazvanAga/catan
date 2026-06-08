@@ -5,7 +5,7 @@
  * for the active player and clicking them sends the placement intent.
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { BUILD_COSTS, DevCard, GameView, RESOURCES, Resource, canAfford } from '@catan/shared';
 import { useStore } from '../store';
 import { commands } from '../socket';
@@ -24,6 +24,7 @@ import {
 } from '../game/affordances';
 import { TradePanel } from './TradePanel';
 import { COLOR_HEX, RESOURCE_LABEL } from '../colors';
+import { Road, House, Castle, FileQuestion } from 'lucide-react';
 
 export function GameScreen() {
   const view = useStore((s) => s.view)!;
@@ -197,11 +198,10 @@ export function GameScreen() {
             onCancel={resetDev}
           />
         )}
-        {canBuild && <BuildBar view={view} mode={buildMode} setMode={setBuildMode} />}
+        {canBuild && <BuildBar view={view} mode={buildMode} setMode={setBuildMode} canBuyDev={canBuild} onBuyDev={() => commands.buyDevCard()} />}
         {view.phase === 'PLAY' && (
           <DevPanel
             view={view}
-            canBuy={canBuild}
             canPlay={!!canPlayDev}
             onPlay={(card) => {
               setBuildMode(null);
@@ -222,33 +222,53 @@ export function GameScreen() {
   );
 }
 
+const BUILD_ICONS = { road: Road, settlement: House, city: Castle } as const;
+
 function BuildBar({
   view,
   mode,
   setMode,
+  canBuyDev,
+  onBuyDev,
 }: {
   view: GameView;
   mode: BuildKind | null;
   setMode: (m: BuildKind | null) => void;
+  canBuyDev: boolean;
+  onBuyDev: () => void;
 }) {
   const kinds: BuildKind[] = ['road', 'settlement', 'city'];
+  const devAffordable = view.you ? canAfford(view.you.hand, BUILD_COSTS.devCard) : false;
+  const deckLeft = view.devDeckCount;
   return (
     <div className="buildbar">
       {kinds.map((kind) => {
+        const Icon = BUILD_ICONS[kind];
         const affordable = canAffordBuild(view, kind);
         const active = mode === kind;
         return (
           <button
             key={kind}
-            className={`build-btn${active ? ' active' : ''}`}
+            className={`build-btn build-icon-btn${active ? ' active' : ''}`}
             disabled={!affordable && !active}
             title={affordable ? `Build ${kind}` : `Can't afford a ${kind}`}
             onClick={() => setMode(active ? null : kind)}
           >
-            {kind}
+            <Icon size={18} />
           </button>
         );
       })}
+      <div className="build-icon-wrap">
+        <button
+          className="build-btn build-icon-btn"
+          disabled={!canBuyDev || !devAffordable || deckLeft === 0}
+          title={deckLeft === 0 ? 'Deck empty' : devAffordable ? 'Buy a development card' : 'Need sheep + wheat + ore'}
+          onClick={onBuyDev}
+        >
+          <FileQuestion size={18} />
+        </button>
+        {deckLeft > 0 && <span className="deck-badge">{deckLeft}</span>}
+      </div>
       {mode && <span className="build-hint">Pick a highlighted spot</span>}
     </div>
   );
@@ -284,28 +304,75 @@ function Banner({ view, myTurn }: { view: GameView; myTurn: boolean }) {
   );
 }
 
+const PIPS: Record<number, [number, number][]> = {
+  1: [[1, 1]],
+  2: [[0, 2], [2, 0]],
+  3: [[0, 2], [1, 1], [2, 0]],
+  4: [[0, 0], [0, 2], [2, 0], [2, 2]],
+  5: [[0, 0], [0, 2], [1, 1], [2, 0], [2, 2]],
+  6: [[0, 0], [1, 0], [2, 0], [0, 2], [1, 2], [2, 2]],
+};
+
+function Die({ value, onClick }: { value: number | null; onClick?: () => void }) {
+  const [anim, setAnim] = useState(1);
+  useEffect(() => {
+    if (value !== null) return;
+    const id = setInterval(() => setAnim((v) => (v % 6) + 1), 1000);
+    return () => clearInterval(id);
+  }, [value]);
+
+  const face = value ?? anim;
+  return (
+    <div className={`die${onClick ? ' die-roll' : ''}`} onClick={onClick} title={onClick ? 'Roll' : String(value)}>
+      <div className={`die-pips${value === null ? ' die-pips-anim' : ''}`}>
+        {PIPS[face].map(([r, c], i) => (
+          <span key={i} className="pip" style={{ gridRow: r + 1, gridColumn: c + 1 }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ActionBar({ view, myTurn }: { view: GameView; myTurn: boolean }) {
   const phase = view.turn?.phase;
   const roll = view.turn?.lastRoll;
+  const mustRoll = phase === 'MUST_ROLL';
   return (
     <div className="actionbar">
-      {roll && (
-        <div className="dice" title="last roll">
-          <span className="die">{roll[0]}</span>
-          <span className="die">{roll[1]}</span>
+      {mustRoll ? (
+        <div className="dice">
+          <Die value={null} onClick={myTurn ? () => commands.roll() : undefined} />
+          <Die value={null} onClick={myTurn ? () => commands.roll() : undefined} />
+        </div>
+      ) : roll ? (
+        <div className="dice">
+          <Die value={roll[0]} />
+          <Die value={roll[1]} />
           <span className="dice-total">= {roll[0] + roll[1]}</span>
         </div>
-      )}
-      {myTurn && phase === 'MUST_ROLL' && (
-        <button className="primary" onClick={() => commands.roll()}>
-          Roll dice
-        </button>
-      )}
+      ) : null}
       {myTurn && phase === 'ACTIONS' && (
         <button className="primary" onClick={() => commands.endTurn()}>
           End turn
         </button>
       )}
+    </div>
+  );
+}
+
+function ResSelect({ value, onChange }: { value: Resource; onChange: (r: Resource) => void }) {
+  return (
+    <div className="res-select">
+      {RESOURCES.map((r) => (
+        <button
+          key={r}
+          className={`res-select-btn${r === value ? ' selected' : ''}`}
+          onClick={() => onChange(r)}
+          title={RESOURCE_LABEL[r]}
+        >
+          <img src={`/icons/${r}.png`} alt={r} />
+        </button>
+      ))}
     </div>
   );
 }
@@ -321,24 +388,12 @@ function BankTrade({ view }: { view: GameView }) {
       <div className="banktrade-title">Bank / port trade</div>
       <div className="banktrade-row">
         <span>Give</span>
-        <select value={give} onChange={(e) => setGive(e.target.value as Resource)}>
-          {RESOURCES.map((r) => (
-            <option key={r} value={r}>
-              {RESOURCE_LABEL[r]}
-            </option>
-          ))}
-        </select>
+        <ResSelect value={give} onChange={setGive} />
         <span className="ratio">{ratio}:1</span>
       </div>
       <div className="banktrade-row">
         <span>Get</span>
-        <select value={receive} onChange={(e) => setReceive(e.target.value as Resource)}>
-          {RESOURCES.map((r) => (
-            <option key={r} value={r}>
-              {RESOURCE_LABEL[r]}
-            </option>
-          ))}
-        </select>
+        <ResSelect value={receive} onChange={setReceive} />
       </div>
       <button
         className="build-btn"
@@ -396,7 +451,7 @@ function DiscardPanel({ view }: { view: GameView }) {
           const picked = picks[res] ?? 0;
           return (
             <div key={res} className="discard-row">
-              <span className="discard-res">{RESOURCE_LABEL[res]}</span>
+              <img src={`/icons/${res}.png`} className="discard-res-icon" alt={res} />
               <span className="discard-have">×{have}</span>
               <button className="step" disabled={picked === 0} onClick={() => bump(res, -1)}>
                 −
@@ -486,21 +541,15 @@ const DEV_LABEL: Record<DevCard, string> = {
  */
 function DevPanel({
   view,
-  canBuy,
   canPlay,
   onPlay,
 }: {
   view: GameView;
-  canBuy: boolean;
   canPlay: boolean;
   onPlay: (card: DevCard) => void;
 }) {
   const cards = view.you?.devCards ?? [];
   const turnNumber = view.turn?.turnNumber ?? 0;
-  const affordable = view.you ? canAfford(view.you.hand, BUILD_COSTS.devCard) : false;
-  const deckLeft = view.devDeckCount;
-
-  // Stable display order, counting copies and the playable (not-bought-this-turn) ones.
   const order: DevCard[] = ['knight', 'road_building', 'year_of_plenty', 'monopoly', 'victory_point'];
   const groups = order
     .map((card) => ({
@@ -510,40 +559,29 @@ function DevPanel({
     }))
     .filter((g) => g.count > 0);
 
+  if (groups.length === 0) return null;
+
   return (
     <div className="devpanel">
-      <div className="devpanel-title">Development cards</div>
-      <button
-        className="build-btn"
-        disabled={!canBuy || !affordable || deckLeft === 0}
-        title={deckLeft === 0 ? 'Deck empty' : affordable ? 'Buy a development card' : 'Need sheep + wheat + ore'}
-        onClick={() => commands.buyDevCard()}
-      >
-        Buy card ({deckLeft} left)
-      </button>
-      {groups.length === 0 ? (
-        <p className="build-hint">No development cards yet.</p>
-      ) : (
-        <ul className="devlist">
-          {groups.map(({ card, count, playableNow }) => (
-            <li key={card} className="devlist-row">
-              <span className="dev-name">
-                {DEV_LABEL[card]} ×{count}
-              </span>
-              {card !== 'victory_point' && (
-                <button
-                  className="build-btn"
-                  disabled={!canPlay || !playableNow}
-                  title={playableNow ? `Play ${DEV_LABEL[card]}` : 'Not playable yet'}
-                  onClick={() => onPlay(card)}
-                >
-                  Play
-                </button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <ul className="devlist">
+        {groups.map(({ card, count, playableNow }) => (
+          <li key={card} className="devlist-row">
+            <span className="dev-name">
+              {DEV_LABEL[card]} ×{count}
+            </span>
+            {card !== 'victory_point' && (
+              <button
+                className="build-btn"
+                disabled={!canPlay || !playableNow}
+                title={playableNow ? `Play ${DEV_LABEL[card]}` : 'Not playable yet'}
+                onClick={() => onPlay(card)}
+              >
+                Play
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -576,7 +614,7 @@ function PickResources({
           const picked = picks[res] ?? 0;
           return (
             <div key={res} className="discard-row">
-              <span className="discard-res">{RESOURCE_LABEL[res]}</span>
+              <img src={`/icons/${res}.png`} className="discard-res-icon" alt={res} />
               <button className="step" disabled={picked === 0} onClick={() => bump(res, -1)}>
                 −
               </button>
@@ -646,7 +684,7 @@ function Hand({ view }: { view: GameView }) {
       <div className="hand-cards">
         {entries.map(([res, n]) => (
           <div key={res} className={`hand-card${n === 0 ? ' empty' : ''}`}>
-            <span className="hand-res">{RESOURCE_LABEL[res]}</span>
+            <img src={`/icons/${res}.png`} className="hand-res-icon" alt={res} />
             <span className="hand-n">{n}</span>
           </div>
         ))}

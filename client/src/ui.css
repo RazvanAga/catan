@@ -326,8 +326,10 @@ button.secondary:disabled {
   opacity: 0.4;
 }
 
-.hand-res {
-  color: var(--muted);
+.hand-res-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
 }
 
 .hand-n {
@@ -349,14 +351,47 @@ button.secondary:disabled {
 }
 
 .die {
-  display: grid;
-  place-items: center;
-  width: 30px;
-  height: 30px;
+  position: relative;
+  width: 38px;
+  height: 38px;
   background: #f4ecd6;
-  color: #23303f;
-  border-radius: 6px;
-  font-weight: 700;
+  border: 2px solid #c8b89a;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.die-roll {
+  background: #1a2330;
+  border: 2px dashed #6a84a0;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+}
+
+.die-roll:hover {
+  opacity: 1;
+}
+
+.die-pips {
+  display: grid;
+  grid-template-rows: repeat(3, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 5px;
+  box-sizing: border-box;
+}
+
+.pip {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #23303f;
+  place-self: center;
+}
+
+.die-pips-anim .pip {
+  background: #6a84a0;
 }
 
 .dice-total {
@@ -379,6 +414,31 @@ button.secondary:disabled {
   background: #1a2330;
   color: var(--text);
   cursor: pointer;
+}
+
+.build-icon-btn {
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.build-icon-wrap {
+  position: relative;
+}
+
+.deck-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 1px 4px;
+  line-height: 1.4;
+  pointer-events: none;
 }
 
 .build-btn.active {
@@ -425,9 +485,11 @@ button.secondary:disabled {
   gap: 8px;
 }
 
-.discard-res {
-  flex: 1;
-  font-size: 0.85rem;
+.discard-res-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .discard-have {
@@ -472,10 +534,6 @@ button.secondary:disabled {
   gap: 8px;
 }
 
-.devpanel-title {
-  font-size: 0.85rem;
-  color: var(--muted);
-}
 
 .devlist {
   list-style: none;
@@ -524,13 +582,38 @@ button.secondary:disabled {
   font-size: 0.85rem;
 }
 
-.banktrade select {
+.res-select {
+  display: flex;
+  gap: 4px;
   flex: 1;
-  padding: 6px 8px;
-  border-radius: 8px;
-  background: #1a2330;
-  color: var(--text);
+}
+
+.res-select-btn {
+  width: 32px;
+  height: 32px;
+  padding: 3px;
+  border-radius: 6px;
   border: 1px solid var(--border);
+  background: #1a2330;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 0.1s;
+}
+
+.res-select-btn:hover {
+  opacity: 0.85;
+}
+
+.res-select-btn.selected {
+  opacity: 1;
+  border-color: var(--accent);
+  background: #1e3050;
+}
+
+.res-select-btn img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .ratio {
@@ -622,6 +705,12 @@ button.secondary:disabled {
   align-items: center;
   gap: 2px;
   font-size: 0.65rem;
+}
+
+.stepper-res-icon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
 }
 
 .stepper-controls {

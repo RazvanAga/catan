@@ -63,7 +63,20 @@ export function Board({
         const isRed = token === 6 || token === 8;
         return (
           <g key={`t${tile.id}`}>
-            <polygon points={points} fill={RESOURCE_HEX[resource]} stroke="#0d141d" strokeWidth={2} />
+            <clipPath id={`hexclip-${tile.id}`}>
+              <polygon points={points} />
+            </clipPath>
+            <polygon points={points} fill={RESOURCE_HEX[resource]} />
+            <image
+              href={`/tiles/${resource}.png`}
+              x={tile.center.x - 75}
+              y={tile.center.y - 75}
+              width={150}
+              height={150}
+              clipPath={`url(#hexclip-${tile.id})`}
+              preserveAspectRatio="xMidYMid slice"
+            />
+            <polygon points={points} fill="none" stroke="#0d141d" strokeWidth={2} />
             {token != null && (
               <g>
                 <circle cx={tile.center.x} cy={tile.center.y} r={16} fill="#f4ecd6" stroke="#0d141d" />
@@ -86,7 +99,7 @@ export function Board({
       {/* Ports */}
       {BOARD.ports.map((port) => {
         const type = board.setup.portTypes[port.id];
-        const label = type === '3:1' ? '3:1' : `2:1`;
+        const isResource = type !== '3:1';
         return (
           <g key={`p${port.id}`}>
             {port.vertices.map((vid) => (
@@ -101,12 +114,22 @@ export function Board({
               />
             ))}
             <circle cx={port.pixel.x} cy={port.pixel.y} r={14} fill="#2a3a52" stroke="#9fb4d0" />
-            <text x={port.pixel.x} y={port.pixel.y + 1} textAnchor="middle" fontSize={9} fontWeight={700} fill="#dfe8f4">
-              {label}
-            </text>
-            {type !== '3:1' && (
-              <text x={port.pixel.x} y={port.pixel.y + 10} textAnchor="middle" fontSize={7} fill="#dfe8f4">
-                {type}
+            {isResource ? (
+              <>
+                <image
+                  href={`/icons/${type}.png`}
+                  x={port.pixel.x - 8}
+                  y={port.pixel.y - 12}
+                  width={16}
+                  height={16}
+                />
+                <text x={port.pixel.x} y={port.pixel.y + 11} textAnchor="middle" fontSize={7} fontWeight={700} fill="#dfe8f4">
+                  2:1
+                </text>
+              </>
+            ) : (
+              <text x={port.pixel.x} y={port.pixel.y + 4} textAnchor="middle" fontSize={9} fontWeight={700} fill="#dfe8f4">
+                3:1
               </text>
             )}
           </g>
