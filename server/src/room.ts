@@ -38,6 +38,17 @@ interface Viewer {
 /** After this long disconnected, a seat goes vacant (claimable + auto-skipped). */
 const DEFAULT_VACANCY_MS = 2 * 60 * 1000;
 
+// --- Bot pacing (issue 0023) -------------------------------------------------
+// The driver waits this long *before* each bot action so a bot's turn unfolds as
+// a watchable play-by-play instead of resolving in one synchronous burst. Tuned
+// for "feels like someone is playing"; retune freely.
+/** Base wait before a routine bot action (build, buy, discard, trade response). */
+const BOT_BEAT_MS = 700;
+/** Random ± applied to every beat so the rhythm isn't a metronome. */
+const BOT_BEAT_JITTER_MS = 150;
+/** Longer wait on a bot's *first* action of a turn, so the handoff registers. */
+const BOT_HANDOFF_MS = 1000;
+
 export class Room {
   private state: GameState = initialState();
   /** Secret session token -> public seat id. The token never leaves the server. */
@@ -51,11 +62,28 @@ export class Room {
   private readonly vacancyMs: number;
   /** Dice source for bot rolls — the same RNG the human `roll` handler uses. */
   private readonly rollDice: () => [number, number];
+  /** Wait between paced bot actions; injected so tests collapse the clock. */
+  private readonly delay: (ms: number) => Promise<void>;
+  /** True while a drive loop is in flight — the single in-flight guard. */
+  private driving = false;
+  /**
+   * Bumped on any state-replacing lifecycle event (reset / new game). A paused
+   * drive loop captures it on entry and bails the moment it changes, so it never
+   * resumes against a wiped or restarted board.
+   */
+  private generation = 0;
 
-  constructor(opts: { vacancyMs?: number; rollDice?: () => [number, number] } = {}) {
+  constructor(
+    opts: {
+      vacancyMs?: number;
+      rollDice?: () => [number, number];
+      delay?: (ms: number) => Promise<void>;
+    } = {},
+  ) {
     this.vacancyMs = opts.vacancyMs ?? DEFAULT_VACANCY_MS;
     this.rollDice =
       opts.rollDice ?? (() => [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]);
+    this.delay = opts.delay ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
   get phase() {
@@ -105,9 +133,9 @@ export class Room {
    * appended, every viewer is re-broadcast, and we settle any vacant seats that
    * the move may have handed the turn to.
    */
-  apply(action: Action): void {
+  apply(action: Action): Promise<void> {
     this.dispatch(action);
-    this.drive();
+    return this.drive();
   }
 
   // --- Bots in the lobby (issue 0016) -----------------------------------------
@@ -148,6 +176,8 @@ export class Room {
     this.state = state;
     this.eventLog.push(...events);
     this.broadcast(events);
+    // A new game replaces the board out from under any paused drive loop.
+    if (action.type === 'NEW_GAME') this.generation++;
   }
 
   /**
@@ -156,6 +186,7 @@ export class Room {
    * should prompt clients to re-auth. Dev/testing only.
    */
   reset(): void {
+    this.generation++; // abort any paused drive loop bound to the old game
     this.state = initialState();
     this.tokenToPlayerId.clear();
     this.eventLog.length = 0;
@@ -224,7 +255,7 @@ export class Room {
       const seat = this.state.players.find((p) => p.id === playerId);
       if (seat && !seat.connected && !seat.vacant) {
         this.dispatch({ type: 'VACATE_SEAT', playerId });
-        this.drive();
+        void this.drive(); // fire-and-forget; drive() never rejects
       }
     }, this.vacancyMs);
     // Don't keep the process alive just for a vacancy timer.
@@ -246,14 +277,55 @@ export class Room {
    * interleaved, until no automated seat owes anything. A bot ending its turn may
    * hand the table to a vacant seat or another bot, so the two are driven in one
    * loop. Bounded by a guard so a logic bug degrades to stopping, never a hang.
+   *
+   * Async + paced (issue 0023): a short `delay` runs *before* each bot action so a
+   * bot's turn unfolds as a watchable play-by-play. A single in-flight guard keeps
+   * only one loop running, and a generation epoch aborts a paused loop if the game
+   * is reset/replaced. Human actions still dispatch synchronously and immediately;
+   * only the bot choreography is spaced out.
    */
-  private drive(): void {
-    const guard = this.state.players.length * 200 + 100;
-    for (let i = 0; i < guard; i++) {
-      if (this.stepVacant()) continue;
-      if (this.stepBot()) continue;
-      break;
+  private async drive(): Promise<void> {
+    // Single in-flight guard: a second trigger (a human action, a vacancy timer)
+    // never starts a parallel loop. The running loop re-reads fresh state after
+    // every await, so it naturally picks up anything dispatched meanwhile.
+    if (this.driving) return;
+    this.driving = true;
+    const gen = this.generation;
+    try {
+      const guard = this.state.players.length * 200 + 100;
+      for (let i = 0; i < guard; i++) {
+        if (this.generation !== gen) return; // reset / new game mid-pause
+        // Vacant-seat auto-resolution needs no human-facing beat; pace only bots.
+        if (this.stepVacant()) continue;
+        if (!this.botOwingInput()) break;
+        await this.delay(this.beat()); // pause *before* the bot acts
+        if (this.generation !== gen) return;
+        if (!this.stepBot()) break;
+      }
+    } catch (err) {
+      // Auto-moves should never throw (decideBotMove yields legal moves, which
+      // reduce re-validates). If one does it's a bug — log and stop driving
+      // rather than crash the process or leave an unhandled rejection.
+      console.error('drive() aborted:', err);
+    } finally {
+      this.driving = false;
     }
+  }
+
+  /**
+   * How long to wait before the bot's next action. A bot's first action of a turn
+   * (the roll in PLAY, the opening settlement in SETUP) gets a longer handoff beat
+   * so the player registers whose turn it is; everything else gets the base beat.
+   * Jitter keeps the rhythm from feeling robotic.
+   */
+  private beat(): number {
+    const s = this.state;
+    const handoff =
+      (s.phase === 'PLAY' && s.turnPhase === 'MUST_ROLL') ||
+      (s.phase === 'SETUP' && s.setup?.pending === 'settlement');
+    const base = handoff ? BOT_HANDOFF_MS : BOT_BEAT_MS;
+    const jitter = Math.round((Math.random() * 2 - 1) * BOT_BEAT_JITTER_MS);
+    return Math.max(0, base + jitter);
   }
 
   /**

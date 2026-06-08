@@ -35,6 +35,8 @@ export interface GameServerOptions {
   vacancyMs?: number;
   /** Override the dice source (tests want determinism). */
   rollDice?: () => [number, number];
+  /** Override the bot-pacing wait (tests inject an immediate delay). */
+  delay?: (ms: number) => Promise<void>;
   /** Override board generation (tests want determinism). */
   makeBoard?: () => BoardSetup;
   /** Override dev-deck generation (tests want determinism). */
@@ -60,7 +62,7 @@ export function createGameServer(opts: GameServerOptions = {}) {
     cors: { origin: opts.clientOrigin ?? 'http://localhost:5173', methods: ['GET', 'POST'] },
   });
 
-  const room = new Room({ vacancyMs: opts.vacancyMs, rollDice });
+  const room = new Room({ vacancyMs: opts.vacancyMs, rollDice, delay: opts.delay });
 
   io.on('connection', (socket) => {
     // The token is the secret; the seat is always derived from it through the

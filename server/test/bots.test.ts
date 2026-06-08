@@ -183,8 +183,14 @@ interface BotGame {
  * start, and drive the snake draft — the human places on its own turns while the
  * server auto-drives the bot seats. Returns once play has reached PLAY.
  */
-async function startBotGame(bots: number, rollDice: () => [number, number]): Promise<BotGame> {
-  const { httpServer, io } = createGameServer({ rollDice });
+async function startBotGame(
+  bots: number,
+  rollDice: () => [number, number],
+  delay: (ms: number) => Promise<void> = () => Promise.resolve(),
+): Promise<BotGame> {
+  // Inject an immediate delay so the real async drive loop runs (preserving its
+  // event-loop yielding and ordering) but completes near-instantly in tests.
+  const { httpServer, io } = createGameServer({ rollDice, delay });
   await new Promise<void>((r) => httpServer.listen(0, r));
   const port = (httpServer.address() as AddressInfo).port;
 
@@ -326,6 +332,23 @@ describe('bots play through the server driver', () => {
     expect(proposed).toBe(true);
     // Both bots answered automatically (the human proposal never hung).
     expect(host.view!.trade!.responses.length).toBe(2);
+  });
+
+  it('paces bot play through the injected delay (one beat per bot action)', async () => {
+    // A counting (still immediate) delay proves the drive loop waits *before* each
+    // bot action rather than resolving the whole turn in one synchronous burst.
+    let beats = 0;
+    const delay = () => {
+      beats += 1;
+      return Promise.resolve();
+    };
+    const game = await startBotGame(2, () => [2, 3], delay);
+    const beatsAfterSetup = beats;
+    expect(beatsAfterSetup).toBeGreaterThan(0); // bot setup placements were paced
+    await playTurns(game, 6, { sevens: false });
+    // Each bot took several paced actions across six turns — far more than one
+    // beat per turn, confirming per-action (not per-turn) pacing.
+    expect(beats).toBeGreaterThan(beatsAfterSetup + 6);
   });
 
   it('drives a bot-majority game to a bot victory via bank trading', async () => {
