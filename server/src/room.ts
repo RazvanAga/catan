@@ -308,6 +308,14 @@ export class Room {
       );
       return ower ?? null;
     }
+    // A bot that hasn't yet answered an open (human-proposed) trade proposal.
+    if (s.phase === 'PLAY' && s.trade) {
+      const trade = s.trade;
+      const responder = s.players.find(
+        (p) => p.isBot && p.id !== trade.proposer && trade.responses[p.id] === undefined,
+      );
+      if (responder) return responder.id;
+    }
     const current = s.players[s.turnIndex];
     return current?.isBot ? current.id : null;
   }
@@ -331,6 +339,8 @@ export class Room {
         return { type: 'BUILD_ROAD', actorId: botId, edge: move.edge };
       case 'buyDevCard':
         return { type: 'BUY_DEV_CARD', actorId: botId };
+      case 'respondTrade':
+        return { type: 'RESPOND_TRADE', actorId: botId, response: move.response };
       case 'playDevCard': {
         const p = move.play;
         if (p.card === 'knight') {

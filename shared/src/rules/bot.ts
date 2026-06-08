@@ -17,7 +17,7 @@
  */
 
 import { BOARD } from '../board/index.js';
-import { BUILD_COSTS, GameState, PIECE_LIMITS, Resource, ResourceCounts } from '../types.js';
+import { BUILD_COSTS, GameState, PIECE_LIMITS, Resource, ResourceCounts, TradeResponse } from '../types.js';
 import { RESOURCES } from '../types.js';
 import {
   canAfford,
@@ -43,6 +43,7 @@ export type BotMove =
   | { kind: 'roll' }
   | { kind: 'discard'; resources: Partial<ResourceCounts> }
   | { kind: 'moveRobber'; tile: number; stealFrom: string | null }
+  | { kind: 'respondTrade'; response: TradeResponse }
   | { kind: 'playDevCard'; play: BotDevPlay }
   | { kind: 'buildCity'; vertex: number }
   | { kind: 'buildSettlement'; vertex: number }
@@ -55,6 +56,16 @@ export function decideBotMove(state: GameState, botId: string): BotMove | null {
   if (state.phase === 'PLAY' && state.turnPhase === 'DISCARD') {
     const owed = state.discard?.required[botId] ?? 0;
     return owed > 0 ? { kind: 'discard', resources: chooseDiscard(state, botId, owed) } : null;
+  }
+
+  // A non-active bot responds to an open (human-proposed) trade it hasn't answered.
+  if (
+    state.phase === 'PLAY' &&
+    state.trade &&
+    state.trade.proposer !== botId &&
+    state.trade.responses[botId] === undefined
+  ) {
+    return { kind: 'respondTrade', response: decideTradeResponse(state, botId) };
   }
 
   // Everything else is only the current player's to act on.
@@ -334,6 +345,26 @@ function bestMonopolyResource(state: GameState, botId: string): Resource | null 
     }
   }
   return best;
+}
+
+// --- Trade responses (issue 0020) --------------------------------------------
+
+function sumMap(map: Partial<ResourceCounts>): number {
+  return (Object.values(map) as number[]).reduce((a, b) => a + b, 0);
+}
+
+/**
+ * Accept a proposed trade only if the bot can pay what's wanted and the swap is
+ * non-losing — it receives at least as many cards as it gives. Bots never counter
+ * or initiate, so this is the only player-trade move a bot makes.
+ */
+function decideTradeResponse(state: GameState, botId: string): TradeResponse {
+  const trade = state.trade!;
+  const me = getPlayer(state, botId)!;
+  // The proposer offers `give` (which the bot would receive) for `want` (which the
+  // bot would pay). The responder's side is therefore: pay `want`, gain `give`.
+  if (!canAfford(me.hand, trade.want)) return 'decline';
+  return sumMap(trade.give) >= sumMap(trade.want) ? 'accept' : 'decline';
 }
 
 /** Two resources that move the bot toward its cheapest unaffordable build. */

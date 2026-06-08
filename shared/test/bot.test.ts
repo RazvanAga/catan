@@ -69,6 +69,8 @@ function toAction(s: GameState, id: string, move: BotMove, dice: () => [number, 
       return { type: 'BUILD_ROAD', actorId: id, edge: move.edge };
     case 'buyDevCard':
       return { type: 'BUY_DEV_CARD', actorId: id };
+    case 'respondTrade':
+      return { type: 'RESPOND_TRADE', actorId: id, response: move.response };
     case 'playDevCard': {
       const p = move.play;
       if (p.card === 'knight') {
@@ -346,6 +348,57 @@ describe('decideBotMove — development cards', () => {
   });
   // A full all-bot 10-VP victory needs bank trading to unblock resource-starved
   // bots; that end-to-end test lives in issue 0021.
+});
+
+// --- Trade responses (issue 0020) --------------------------------------------
+
+function withTrade(
+  state: GameState,
+  proposer: string,
+  give: Partial<Hand>,
+  want: Partial<Hand>,
+): GameState {
+  return { ...state, trade: { proposer, give, want, responses: {} } };
+}
+
+describe('decideBotMove — trade responses', () => {
+  it('accepts a non-losing trade it can pay for', () => {
+    let s = inActions(driveSetup(started()));
+    const [p1, p2] = s.players;
+    s = setHand(withTrade(s, p1.id, { wheat: 2 }, { brick: 1 }), p2.id, { brick: 1 });
+    expect(decideBotMove(s, p2.id)).toEqual({ kind: 'respondTrade', response: 'accept' });
+  });
+
+  it('declines a trade it cannot pay for', () => {
+    let s = inActions(driveSetup(started()));
+    const [p1, p2] = s.players;
+    s = setHand(withTrade(s, p1.id, { wheat: 2 }, { ore: 3 }), p2.id, { ore: 0 });
+    expect(decideBotMove(s, p2.id)).toEqual({ kind: 'respondTrade', response: 'decline' });
+  });
+
+  it('declines a losing trade (gives more than it gets)', () => {
+    let s = inActions(driveSetup(started()));
+    const [p1, p2] = s.players;
+    s = setHand(withTrade(s, p1.id, { wheat: 1 }, { brick: 2 }), p2.id, { brick: 2 });
+    expect(decideBotMove(s, p2.id)).toEqual({ kind: 'respondTrade', response: 'decline' });
+  });
+
+  it('does not respond twice', () => {
+    let s = inActions(driveSetup(started()));
+    const [p1, p2] = s.players;
+    s = setHand(withTrade(s, p1.id, { wheat: 2 }, { brick: 1 }), p2.id, { brick: 1 });
+    s = { ...s, trade: { ...s.trade!, responses: { [p2.id]: 'accept' } } };
+    expect(decideBotMove(s, p2.id)).toBeNull();
+  });
+
+  it('the active proposer never auto-responds to its own trade', () => {
+    let s = inActions(driveSetup(started()));
+    const [p1] = s.players;
+    s = setHand(withTrade(s, p1.id, { wheat: 1 }, { brick: 1 }), p1.id, {});
+    // p1 is the current player with an open trade it proposed: it ends its turn,
+    // it does not respond to itself.
+    expect(decideBotMove(s, p1.id)).toEqual({ kind: 'endTurn' });
+  });
 });
 
 describe('decideBotMove — the 7', () => {

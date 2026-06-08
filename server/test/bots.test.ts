@@ -7,7 +7,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { AddressInfo } from 'node:net';
 import { io as connect, type Socket } from 'socket.io-client';
-import { BOARD, type BoardState, type GameView } from '@catan/shared';
+import { BOARD, type BoardState, type GameView, type Resource } from '@catan/shared';
 import { createGameServer } from '../src/app.js';
 
 const COLORS = ['red', 'blue', 'orange'] as const;
@@ -284,5 +284,48 @@ describe('bots play through the server driver', () => {
     const before = game.host.view!.turn!.turnNumber;
     await playTurns(game, 6, { sevens: true });
     expect(game.host.view!.turn!.turnNumber).toBeGreaterThanOrEqual(before + 6);
+  });
+
+  it('makes bots respond to a human trade proposal', async () => {
+    const game = await startBotGame(2, () => [3, 5]); // total 8: production, no 7s
+    const { host, humanSeat } = game;
+    const RES: Resource[] = ['brick', 'wood', 'sheep', 'wheat', 'ore'];
+
+    let proposed = false;
+    let guard = 0;
+    while (!proposed && guard++ < 30 && host.view!.phase === 'PLAY') {
+      const v = host.view!;
+      if (v.turn!.currentPlayerId !== humanSeat) {
+        await host.waitFor((s) => s.turn!.currentPlayerId === humanSeat || s.phase !== 'PLAY');
+        continue;
+      }
+      if (v.turn!.phase === 'MUST_ROLL') {
+        host.emit('roll');
+        await host.waitFor((s) => s.turn!.phase !== 'MUST_ROLL' || s.turn!.currentPlayerId !== humanSeat);
+        continue;
+      }
+      if (v.turn!.phase === 'MOVE_ROBBER') {
+        const { tile, stealFrom } = legalRobberTile(v, humanSeat);
+        host.emit('moveRobber', { tile, stealFrom });
+        await host.waitFor((s) => s.turn!.phase !== 'MOVE_ROBBER');
+        continue;
+      }
+      // ACTIONS: offer one card we hold for a different resource.
+      const hand = host.view!.you!.hand;
+      const give = RES.find((r) => hand[r] >= 1);
+      if (!give) {
+        host.emit('endTurn');
+        await host.waitFor((s) => s.turn!.currentPlayerId !== humanSeat);
+        continue;
+      }
+      const want = RES.find((r) => r !== give)!;
+      host.emit('proposeTrade', { give: { [give]: 1 }, want: { [want]: 1 } });
+      await host.waitFor((s) => (s.trade?.responses.length ?? 0) >= 2);
+      proposed = true;
+    }
+
+    expect(proposed).toBe(true);
+    // Both bots answered automatically (the human proposal never hung).
+    expect(host.view!.trade!.responses.length).toBe(2);
   });
 });
