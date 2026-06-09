@@ -11,6 +11,7 @@
  */
 
 import type { SoundCue } from '@catan/shared';
+import { startMusic } from './music';
 
 const MUTE_KEY = 'catan.muted';
 /** Master level — keeps the synth cues from being harsh. */
@@ -44,6 +45,7 @@ export function unlockAudio(): void {
     master.connect(ctx.destination);
   }
   if (ctx.state === 'suspended') void ctx.resume();
+  startMusic();
 }
 
 // Unlock on the first interaction anywhere — the join/start click qualifies, so

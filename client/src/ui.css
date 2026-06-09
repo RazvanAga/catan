@@ -257,10 +257,16 @@ button.secondary:disabled {
   text-shadow: 0 2px 8px #0006;
 }
 
-/* Sound mute toggle (issue 0026), pinned to the brand row's right edge. */
-.sound-toggle {
+/* Audio control buttons (SFX + music), pinned to the brand row's right edge. */
+.audio-controls {
   position: absolute;
   right: 4px;
+  display: flex;
+  gap: 4px;
+}
+
+.sound-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -276,6 +282,22 @@ button.secondary:disabled {
 .sound-toggle:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+/* Diagonal slash overlay indicating muted state. */
+.sound-toggle.is-muted::after {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  background: linear-gradient(
+    to top right,
+    transparent calc(50% - 1px),
+    currentColor calc(50% - 1px),
+    currentColor calc(50% + 1px),
+    transparent calc(50% + 1px)
+  );
+  pointer-events: none;
+  opacity: 0.75;
 }
 
 /* Sits at the top of the rail just under the CATAN title. */

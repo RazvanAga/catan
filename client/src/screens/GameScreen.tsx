@@ -26,8 +26,9 @@ import {
 import { TradePanel } from './TradePanel';
 import { ResSelect } from './tradeControls';
 import { COLOR_HEX } from '../colors';
-import { Road, House, Castle, FileQuestion, Swords, File, Crown, Volume2, VolumeX } from 'lucide-react';
+import { Road, House, Castle, FileQuestion, Swords, File, Crown, Volume2, VolumeX, Music2 } from 'lucide-react';
 import { isMuted, setMuted as setSoundMuted } from '../game/sound';
+import { isMusicOn, setMusicOn } from '../game/music';
 
 export function GameScreen() {
   const view = useStore((s) => s.view)!;
@@ -126,7 +127,10 @@ export function GameScreen() {
       <aside className="rail">
         <div className="brand-row">
           <div className="brand">CATAN</div>
-          <SoundToggle />
+          <div className="audio-controls">
+            <MusicToggle />
+            <SoundToggle />
+          </div>
         </div>
         <div className="rail-panels">
           <div className="rail-scoreboard">
@@ -247,6 +251,25 @@ export function GameScreen() {
         <Banner view={view} myTurn={myTurn} />
       </div>
     </div>
+  );
+}
+
+function MusicToggle() {
+  const [musicOn, setMusicOnState] = useState(isMusicOn());
+  const toggle = () => {
+    const next = !musicOn;
+    setMusicOn(next);
+    setMusicOnState(next);
+  };
+  return (
+    <button
+      className={`sound-toggle${musicOn ? '' : ' is-muted'}`}
+      onClick={toggle}
+      title={musicOn ? 'Mute music' : 'Unmute music'}
+      aria-label={musicOn ? 'Mute music' : 'Unmute music'}
+    >
+      <Music2 size={18} />
+    </button>
   );
 }
 
