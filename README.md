@@ -1,19 +1,30 @@
-# Catan (web, v1)
+# Catan (web)
 
-Real-time, server-authoritative base-game Catan for a small group of friends.
-See [issues/0001-catan-web-game-v1.md](issues/0001-catan-web-game-v1.md) for the full v1 spec.
+Real-time, server-authoritative base-game Catan for a small group of friends —
+or for you plus a table of AI bots. Snake-draft setup, building, trading, the
+robber, development cards, Longest Road & Largest Army, first to 10 VP wins, now
+with turn pacing, piece pop-in animations, synthesized sound effects and BGM.
+
+![Catan gameplay](client/public/gameplay.png)
+
+See [issues/0001-catan-web-game-v1.md](issues/0001-catan-web-game-v1.md) for the
+original v1 spec and [issues/0015-catan-v2-ai-bot-players.md](issues/0015-catan-v2-ai-bot-players.md)
+for the v2 bots epic.
 
 ## Monorepo layout
 
 npm workspaces, three packages:
 
 - **`shared/`** — pure game types, the pure rules engine `reduce(state, action) → { state, events }`,
-  the per-player view projector `projectStateForPlayer`, and the Socket.IO message protocol.
-  This is the source of truth for game logic and is imported by both server and client.
+  the per-player view projector `projectStateForPlayer`, the Socket.IO message protocol, and the
+  pure bot brain `decideBotMove(view) → action`. This is the source of truth for game logic and is
+  imported by both server and client.
 - **`server/`** — Node + Socket.IO authoritative server holding the single in-memory room.
-  Owns all RNG (none yet in the skeleton) and re-validates every intent through `reduce`.
+  Owns all RNG and re-validates every intent through `reduce`. Drives bot seats by feeding each
+  bot's projected view through `decideBotMove` on a paced async loop.
 - **`client/`** — Vite + React + Zustand app. Renders only from server snapshots; uses
-  `shared` for UX affordances, never as an authority.
+  `shared` for UX affordances, never as an authority. Hosts the effect pipeline (animations,
+  synthesized SFX, BGM) replayed from the server's narration events.
 
 ## Getting started
 
@@ -43,6 +54,14 @@ browser, give each tab a distinct identity with the `?u=` query param:
 A **Reset room** button (bottom-right, dev-only) wipes the singleton room back to
 an empty lobby for everyone — handy for re-testing without restarting the server.
 
+### Playing with bots
+
+Don't have three friends handy? From the lobby the owner can **add bot players**
+to fill empty seats, then start the game. Bots take their own turns on a paced
+loop — building, buying and playing development cards, bank/port trading, and
+responding to trade offers — so you can play a full game solo or top up a short
+table.
+
 ### Environment overrides
 
 - Server: `PORT` (default `3001`), `CLIENT_ORIGIN` (default `http://localhost:5173`, for CORS).
@@ -50,9 +69,11 @@ an empty lobby for everyone — handy for re-testing without restarting the serv
 
 ## Status
 
-**v1 feature-complete** (all slices 0002–0014 landed). The shared rules engine is
-covered by 97 Vitest unit tests and the Socket.IO seat lifecycle by 4 server-side
-integration tests — `npm test` runs both.
+**v1 + v2 feature-complete** (all slices 0002–0026 landed). The shared rules and
+bot engine are covered by 137 Vitest unit tests and the Socket.IO seat lifecycle
+plus bot driver by 14 server-side integration tests — `npm test` runs both.
+
+**v1 — base game**
 
 | Issue | Slice | Done |
 |-------|-------|------|
@@ -70,12 +91,29 @@ integration tests — `npm test` runs both.
 | 0013 | Post-game replay & crown | ✅ |
 | 0014 | Disconnection / reconnection seat lifecycle | ✅ |
 
-**Playable today:** a full game — lobby → snake-draft setup → roll/produce/end-turn
-→ build roads/settlements/cities → bank/port trades → player trades → the 7
-(discard/robber/steal) → development cards → Longest Road & Largest Army bonuses
-→ first to 10 VP wins, with a victory screen revealing every hand → the owner's
-"New game" reseats the group with the winner crowned. All server-enforced with
-per-player snapshots and a narration event log.
+**v2 — AI bots & polish**
+
+| Issue | Slice | Done |
+|-------|-------|------|
+| 0016 | Bots in the lobby | ✅ |
+| 0017 | Bot turn loop & server driver | ✅ |
+| 0018 | Bot building & buying | ✅ |
+| 0019 | Bot plays development cards | ✅ |
+| 0020 | Bot responds to trades | ✅ |
+| 0021 | Bot bank & port trading | ✅ |
+| 0023 | Bot turn pacing — async server drive loop | ✅ |
+| 0024 | Client effect pipeline + piece pop-in | ✅ |
+| 0025 | Remaining animations — robber, dice, pulse, resource/steal | ✅ |
+| 0026 | Synthesized game sounds + mute toggle, BGM | ✅ |
+
+**Playable today:** a full game — lobby (fill empty seats with AI bots) →
+snake-draft setup → roll/produce/end-turn → build roads/settlements/cities →
+bank/port trades → player trades → the 7 (discard/robber/steal) → development
+cards → Longest Road & Largest Army bonuses → first to 10 VP wins, with a victory
+screen revealing every hand → the owner's "New game" reseats the group with the
+winner crowned. All server-enforced with per-player snapshots and a narration
+event log, paced with animations, synthesized sound effects and background music
+(with a mute toggle).
 
 **Seat lifecycle:** a player who drops mid-game is greyed but keeps their seat
 (reclaimable via their session token); the table only blocks when it actually
