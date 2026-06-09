@@ -181,11 +181,15 @@ export function Board({
         );
       })}
 
-      {/* Robber — black disc with a white swords icon (lucide Swords) */}
+      {/* Robber — black disc with a white swords icon (lucide Swords). Positioned
+          via a CSS transform so a move to a new tile slides (see .robber-piece). */}
       <g
-        transform={`translate(${BOARD.tiles[board.robberTile].center.x}, ${
-          BOARD.tiles[board.robberTile].center.y - 22
-        })`}
+        className="robber-piece"
+        style={{
+          transform: `translate(${BOARD.tiles[board.robberTile].center.x}px, ${
+            BOARD.tiles[board.robberTile].center.y - 22
+          }px)`,
+        }}
       >
         <circle r={15} fill="#1a1a1a" stroke="#fff" strokeWidth={1.5} />
         <g

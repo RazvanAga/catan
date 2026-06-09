@@ -10,7 +10,7 @@ import { BUILD_COSTS, DevCard, GameView, RESOURCES, Resource, canAfford } from '
 import { useStore } from '../store';
 import { commands } from '../socket';
 import { Board } from '../game/Board';
-import { useGameEffects } from '../game/useGameEffects';
+import { useGameEffects, HandFloat } from '../game/useGameEffects';
 import {
   BuildKind,
   bankRatio,
@@ -32,8 +32,9 @@ export function GameScreen() {
   const view = useStore((s) => s.view)!;
   const error = useStore((s) => s.error);
   const myTurn = isMyTurn(view);
-  // Event-driven board effects (pieces pop in as they're built, incl. on bot turns).
-  const { poppedVertices, poppedEdges } = useGameEffects();
+  // Event-driven effects: pieces pop in, hand changes float off roster rows, a
+  // steal flashes both players, the local hand pulses on a gain (incl. bot turns).
+  const { poppedVertices, poppedEdges, handFloats, rosterFlash, handPulse } = useGameEffects();
   const [buildMode, setBuildMode] = useState<BuildKind | null>(null);
   // When the robber lands on a tile with multiple stealable players, hold the
   // chosen tile here until the active player picks whom to steal from.
@@ -125,7 +126,7 @@ export function GameScreen() {
         <div className="brand">CATAN</div>
         <div className="rail-panels">
           <div className="rail-scoreboard">
-            <Players view={view} />
+            <Players view={view} handFloats={handFloats} rosterFlash={rosterFlash} />
           </div>
           {canBuild && <BankTrade view={view} />}
           {view.phase === 'PLAY' && <TradePanel view={view} canAct={canBuild} />}
@@ -218,7 +219,7 @@ export function GameScreen() {
         </div>
       </div>
 
-      <Hand view={view} />
+      <Hand view={view} pulse={handPulse} />
 
       <div className="action-bar">
         {canBuild && (
@@ -368,7 +369,8 @@ function ActionBar({ view, myTurn }: { view: GameView; myTurn: boolean }) {
           <Die value={null} onClick={myTurn ? () => commands.roll() : undefined} />
         </div>
       ) : roll ? (
-        <div className="dice">
+        // Re-key on each roll so the dice remount and replay the settle bounce.
+        <div className="dice settle" key={`${view.turn?.turnNumber}-${roll[0]}-${roll[1]}`}>
           <Die value={roll[0]} />
           <Die value={roll[1]} />
           <span className="dice-total">= {roll[0] + roll[1]}</span>
@@ -650,13 +652,25 @@ function PickResources({
   );
 }
 
-function Players({ view }: { view: GameView }) {
+function Players({
+  view,
+  handFloats,
+  rosterFlash,
+}: {
+  view: GameView;
+  handFloats: ReadonlyMap<string, HandFloat>;
+  rosterFlash: ReadonlySet<string>;
+}) {
   return (
     <ul className="roster">
-      {view.players.map((p) => (
+      {view.players.map((p) => {
+        const float = handFloats.get(p.id);
+        return (
         <li
           key={p.id}
-          className={`roster-row${p.isCurrentTurn ? ' current' : ''}${!p.connected ? ' offline' : ''}`}
+          className={`roster-row${p.isCurrentTurn ? ' current' : ''}${!p.connected ? ' offline' : ''}${
+            rosterFlash.has(p.id) ? ' flash' : ''
+          }`}
         >
           <span className="dot" style={{ background: COLOR_HEX[p.color] }} />
           <span className="roster-name">
@@ -687,7 +701,7 @@ function Players({ view }: { view: GameView }) {
               {p.devCardCount}
               <FileQuestion size={14} />
             </span>
-            <span className="stat" title="Resource cards">
+            <span className={`stat${float ? ' bump' : ''}`} title="Resource cards">
               {p.handCount}
               <File size={14} />
             </span>
@@ -696,18 +710,25 @@ function Players({ view }: { view: GameView }) {
               <Crown size={14} />
             </span>
           </span>
+          {float && (
+            <span key={float.id} className={`hand-float ${float.amount > 0 ? 'gain' : 'loss'}`}>
+              {float.amount > 0 ? '+' : '−'}
+              {Math.abs(float.amount)}
+            </span>
+          )}
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
 
-function Hand({ view }: { view: GameView }) {
+function Hand({ view, pulse }: { view: GameView; pulse: boolean }) {
   if (!view.you) return null;
   const entries = Object.entries(view.you.hand) as [keyof typeof view.you.hand, number][];
   const total = entries.reduce((a, [, n]) => a + n, 0);
   return (
-    <div className="hand">
+    <div className={`hand${pulse ? ' pulse' : ''}`}>
       <div className="hand-title">Your hand ({total})</div>
       <div className="hand-cards">
         {entries.map(([res, n]) => (

@@ -22,6 +22,31 @@ describe('effectsForEvent', () => {
     expect(effectsForEvent(event).animation).toEqual({ kind: 'roadPlaced', edge: 5 });
   });
 
+  it('maps granted resources to a positive hand-delta on that player', () => {
+    const event: GameEvent = { type: 'RESOURCES_GRANTED', playerId: 'p1', resources: { wood: 2, brick: 1 } };
+    expect(effectsForEvent(event).animation).toEqual({ kind: 'handDelta', playerId: 'p1', amount: 3 });
+  });
+
+  it('maps discarded cards to a negative hand-delta', () => {
+    const event: GameEvent = { type: 'CARDS_DISCARDED', playerId: 'p1', resources: { ore: 2 } };
+    expect(effectsForEvent(event).animation).toEqual({ kind: 'handDelta', playerId: 'p1', amount: -2 });
+  });
+
+  it('maps a monopoly to a positive hand-delta of the claimed count', () => {
+    const event: GameEvent = { type: 'MONOPOLY', playerId: 'p1', resource: 'sheep', count: 4 };
+    expect(effectsForEvent(event).animation).toEqual({ kind: 'handDelta', playerId: 'p1', amount: 4 });
+  });
+
+  it('maps a steal to a both-parties flash cue', () => {
+    const event: GameEvent = { type: 'CARD_STOLEN', from: 'p2', to: 'p1' };
+    expect(effectsForEvent(event).animation).toEqual({ kind: 'steal', from: 'p2', to: 'p1' });
+  });
+
+  it('produces no cue for an empty grant', () => {
+    const event: GameEvent = { type: 'RESOURCES_GRANTED', playerId: 'p1', resources: {} };
+    expect(effectsForEvent(event)).toEqual({});
+  });
+
   it('returns no cue for an event with no visible effect (yet)', () => {
     const event: GameEvent = { type: 'TURN_ENDED', playerId: 'p1' };
     expect(effectsForEvent(event)).toEqual({});

@@ -10,12 +10,23 @@
  * animations, 0026 fills in `SoundCue`.
  */
 
-import type { GameEvent } from './types.js';
+import type { GameEvent, ResourceCounts } from './types.js';
 
-/** A board animation implied by a game event. Extended in issue 0025. */
+/**
+ * A UI animation implied by a game event.
+ *
+ * `buildingPlaced` / `roadPlaced` pop a fresh board piece in. `handDelta` /
+ * `steal` are the player-targeted "felt" effects (issue 0025): a signed hand
+ * change floats off a player's roster row, and a steal flashes both parties. The
+ * robber slide, dice settle and current-turn pulse are *not* here — they are
+ * positional/turn effects the client renders straight from snapshot state via CSS,
+ * with no per-event cue to carry.
+ */
 export type AnimationCue =
   | { kind: 'buildingPlaced'; vertex: number }
-  | { kind: 'roadPlaced'; edge: number };
+  | { kind: 'roadPlaced'; edge: number }
+  | { kind: 'handDelta'; playerId: string; amount: number }
+  | { kind: 'steal'; from: string; to: string };
 
 /** A sound to play for a game event. Populated in issue 0026. */
 export type SoundCue = never;
@@ -38,7 +49,26 @@ export function effectsForEvent(event: GameEvent): EventEffects {
       return { animation: { kind: 'buildingPlaced', vertex: event.vertex } };
     case 'ROAD_BUILT':
       return { animation: { kind: 'roadPlaced', edge: event.edge } };
+    case 'RESOURCES_GRANTED': {
+      const amount = sumCounts(event.resources);
+      return amount > 0 ? { animation: { kind: 'handDelta', playerId: event.playerId, amount } } : {};
+    }
+    case 'CARDS_DISCARDED': {
+      const amount = sumCounts(event.resources);
+      return amount > 0 ? { animation: { kind: 'handDelta', playerId: event.playerId, amount: -amount } } : {};
+    }
+    case 'MONOPOLY':
+      return event.count > 0
+        ? { animation: { kind: 'handDelta', playerId: event.playerId, amount: event.count } }
+        : {};
+    case 'CARD_STOLEN':
+      return { animation: { kind: 'steal', from: event.from, to: event.to } };
     default:
       return {};
   }
+}
+
+/** Total number of cards in a (partial) resource-count bag. */
+function sumCounts(counts: Partial<ResourceCounts>): number {
+  return Object.values(counts).reduce((a, n) => a + (n ?? 0), 0);
 }
