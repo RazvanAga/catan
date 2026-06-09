@@ -17,6 +17,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { effectsForEvent } from '@catan/shared';
 import { useStore } from '../store';
+import { playCue } from './sound';
 
 /** How long a freshly-placed piece keeps its pop-in class. Matches the CSS. */
 const POP_MS = 420;
@@ -63,7 +64,12 @@ export function useGameEffects(): GameEffects {
       return;
     }
     for (let i = cursor.current; i < events.length; i++) {
-      const { animation } = effectsForEvent(events[i]);
+      const event = events[i];
+      const { animation, sound } = effectsForEvent(event);
+      // The your-turn chime is self-only and contextual, so it isn't in the pure
+      // mapper — fire it when a PLAY turn starts for the local seat.
+      if (event.type === 'TURN_STARTED' && event.playerId === youId) playCue('yourTurn');
+      else if (sound) playCue(sound);
       if (!animation) continue;
       switch (animation.kind) {
         case 'buildingPlaced':

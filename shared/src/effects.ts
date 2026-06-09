@@ -28,8 +28,20 @@ export type AnimationCue =
   | { kind: 'handDelta'; playerId: string; amount: number }
   | { kind: 'steal'; from: string; to: string };
 
-/** A sound to play for a game event. Populated in issue 0026. */
-export type SoundCue = never;
+/**
+ * A sound to play for a game event (issue 0026), synthesized client-side.
+ * `yourTurn` is never produced by the mapper — it is inherently self-only, so the
+ * client fires it when a turn starts for the *local* seat.
+ */
+export type SoundCue =
+  | 'dice'
+  | 'build'
+  | 'robber'
+  | 'steal'
+  | 'deal'
+  | 'dev'
+  | 'yourTurn'
+  | 'win';
 
 /** The presentation effects (animation and/or sound) a game event implies. */
 export interface EventEffects {
@@ -46,12 +58,14 @@ export function effectsForEvent(event: GameEvent): EventEffects {
   switch (event.type) {
     case 'SETTLEMENT_BUILT':
     case 'CITY_BUILT':
-      return { animation: { kind: 'buildingPlaced', vertex: event.vertex } };
+      return { animation: { kind: 'buildingPlaced', vertex: event.vertex }, sound: 'build' };
     case 'ROAD_BUILT':
-      return { animation: { kind: 'roadPlaced', edge: event.edge } };
+      return { animation: { kind: 'roadPlaced', edge: event.edge }, sound: 'build' };
+    case 'DICE_ROLLED':
+      return { sound: 'dice' };
     case 'RESOURCES_GRANTED': {
       const amount = sumCounts(event.resources);
-      return amount > 0 ? { animation: { kind: 'handDelta', playerId: event.playerId, amount } } : {};
+      return amount > 0 ? { animation: { kind: 'handDelta', playerId: event.playerId, amount }, sound: 'deal' } : {};
     }
     case 'CARDS_DISCARDED': {
       const amount = sumCounts(event.resources);
@@ -61,8 +75,15 @@ export function effectsForEvent(event: GameEvent): EventEffects {
       return event.count > 0
         ? { animation: { kind: 'handDelta', playerId: event.playerId, amount: event.count } }
         : {};
+    case 'ROBBER_MOVED':
+      return { sound: 'robber' };
     case 'CARD_STOLEN':
-      return { animation: { kind: 'steal', from: event.from, to: event.to } };
+      return { animation: { kind: 'steal', from: event.from, to: event.to }, sound: 'steal' };
+    case 'DEV_CARD_BOUGHT':
+    case 'DEV_CARD_PLAYED':
+      return { sound: 'dev' };
+    case 'GAME_WON':
+      return { sound: 'win' };
     default:
       return {};
   }

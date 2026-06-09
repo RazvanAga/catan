@@ -240,7 +240,14 @@ button.secondary:disabled {
   overflow-y: auto;
 }
 
+.brand-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .brand {
+  flex: 1;
   font-size: 3rem;
   font-weight: 800;
   letter-spacing: 0.22em;
@@ -248,6 +255,27 @@ button.secondary:disabled {
   color: var(--accent);
   padding: 8px 6px 4px;
   text-shadow: 0 2px 8px #0006;
+}
+
+/* Sound mute toggle (issue 0026), pinned to the brand row's right edge. */
+.sound-toggle {
+  position: absolute;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #1a2330;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sound-toggle:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* Sits at the top of the rail just under the CATAN title. */

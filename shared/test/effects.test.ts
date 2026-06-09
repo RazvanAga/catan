@@ -52,8 +52,37 @@ describe('effectsForEvent', () => {
     expect(effectsForEvent(event)).toEqual({});
   });
 
-  it('never produces a sound cue in this slice', () => {
+  it('pairs a build with both a pop-in and a build sound', () => {
+    const event: GameEvent = { type: 'ROAD_BUILT', playerId: 'p1', edge: 5, setup: false };
+    expect(effectsForEvent(event)).toEqual({ animation: { kind: 'roadPlaced', edge: 5 }, sound: 'build' });
+  });
+
+  it('maps a dice roll to a dice sound (no animation)', () => {
     const event: GameEvent = { type: 'DICE_ROLLED', playerId: 'p1', dice: [3, 4], total: 7 };
-    expect(effectsForEvent(event).sound).toBeUndefined();
+    expect(effectsForEvent(event)).toEqual({ sound: 'dice' });
+  });
+
+  it('maps a robber move to a robber sound', () => {
+    const event: GameEvent = { type: 'ROBBER_MOVED', playerId: 'p1', tile: 4 };
+    expect(effectsForEvent(event).sound).toBe('robber');
+  });
+
+  it('maps a win to a win sound', () => {
+    const event: GameEvent = { type: 'GAME_WON', playerId: 'p1', victoryPoints: 10 };
+    expect(effectsForEvent(event).sound).toBe('win');
+  });
+
+  it('maps dev-card buy and play to a dev sound', () => {
+    expect(effectsForEvent({ type: 'DEV_CARD_BOUGHT', playerId: 'p1' }).sound).toBe('dev');
+    expect(effectsForEvent({ type: 'DEV_CARD_PLAYED', playerId: 'p1', card: 'knight' }).sound).toBe('dev');
+  });
+
+  it('never produces the self-only yourTurn cue from the mapper', () => {
+    // The your-turn chime is contextual (depends on the local seat), so the client
+    // fires it; the pure mapper must never emit it.
+    const sounds = ([] as (string | undefined)[]).concat(
+      effectsForEvent({ type: 'TURN_STARTED', playerId: 'p1', turnNumber: 3 }).sound,
+    );
+    expect(sounds).not.toContain('yourTurn');
   });
 });

@@ -26,7 +26,8 @@ import {
 import { TradePanel } from './TradePanel';
 import { ResSelect } from './tradeControls';
 import { COLOR_HEX } from '../colors';
-import { Road, House, Castle, FileQuestion, Swords, File, Crown } from 'lucide-react';
+import { Road, House, Castle, FileQuestion, Swords, File, Crown, Volume2, VolumeX } from 'lucide-react';
+import { isMuted, setMuted as setSoundMuted } from '../game/sound';
 
 export function GameScreen() {
   const view = useStore((s) => s.view)!;
@@ -123,7 +124,10 @@ export function GameScreen() {
   return (
     <div className="game-layout">
       <aside className="rail">
-        <div className="brand">CATAN</div>
+        <div className="brand-row">
+          <div className="brand">CATAN</div>
+          <SoundToggle />
+        </div>
         <div className="rail-panels">
           <div className="rail-scoreboard">
             <Players view={view} handFloats={handFloats} rosterFlash={rosterFlash} />
@@ -243,6 +247,26 @@ export function GameScreen() {
         <Banner view={view} myTurn={myTurn} />
       </div>
     </div>
+  );
+}
+
+/** Mute toggle for the synthesized sounds (issue 0026); persisted in localStorage. */
+function SoundToggle() {
+  const [muted, setMuted] = useState(isMuted());
+  const toggle = () => {
+    const next = !muted;
+    setSoundMuted(next);
+    setMuted(next);
+  };
+  return (
+    <button
+      className="sound-toggle"
+      onClick={toggle}
+      title={muted ? 'Unmute sounds' : 'Mute sounds'}
+      aria-label={muted ? 'Unmute sounds' : 'Mute sounds'}
+    >
+      {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+    </button>
   );
 }
 
